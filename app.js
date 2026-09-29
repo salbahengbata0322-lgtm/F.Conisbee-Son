@@ -6,8 +6,8 @@
 // 3. Project Settings -> API -> copy the Project URL and the "anon public" key
 // 4. Paste them below
 // ============================================================================
-const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";       // e.g. https://abcdefgh.supabase.co
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";      // the long "anon public" key
+const SUPABASE_URL = "https://itqotgvzqqavarpbmfxl.supabase.co";       // e.g. https://abcdefgh.supabase.co
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cW90Z3Z6cXFhdmFycGJtZnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MjI4ODUsImV4cCI6MjEwNjE5ODg4NX0.a_6rcmb1sPzy_OizhWajGiyAbOkIUnK7sysXWROU6p0";      // the long "anon public" key
 // ============================================================================
 
 let supabase = null;
