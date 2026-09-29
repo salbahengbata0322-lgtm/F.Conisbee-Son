@@ -274,6 +274,40 @@ function renderDashboard() {
 
   renderOrderChart();
   renderTillSalesSummary();
+  renderStatusPaymentBreakdown();
+}
+
+// Small KPI-style cards showing order count + total £ per Status and per
+// Payment state — same visual pattern as the Till Sales cards.
+function renderStatusPaymentBreakdown() {
+  const cardHtml = (value, label) => `
+    <div class="kpi-card">
+      <div class="kpi-value">${money(value)}</div>
+      <div class="kpi-label">${label}</div>
+    </div>`;
+
+  // Status: only show groups that actually have orders, in a sensible order
+  const statusOrder = ["Pending", "Confirmed", "Ready", "Collected", "Delivered", "Cancelled"];
+  const statusEl = document.getElementById("statusBreakdown");
+  statusEl.innerHTML = statusOrder
+    .map((status) => {
+      const matches = CACHE.orders.filter((o) => o.status === status);
+      if (matches.length === 0) return "";
+      const total = matches.reduce((s, o) => s + o.subtotal, 0);
+      return cardHtml(total, `${status} (${matches.length} order${matches.length === 1 ? "" : "s"})`);
+    })
+    .join("");
+
+  // Payment: always show all three, even at zero, since it's a small fixed set
+  const paymentOrder = ["Paid", "Partial", "Unpaid"];
+  const paymentEl = document.getElementById("paymentBreakdown");
+  paymentEl.innerHTML = paymentOrder
+    .map((state) => {
+      const matches = CACHE.orders.filter((o) => paymentStatusFor(o) === state);
+      const total = matches.reduce((s, o) => s + o.subtotal, 0);
+      return cardHtml(total, `${state} (${matches.length} order${matches.length === 1 ? "" : "s"})`);
+    })
+    .join("");
 }
 
 // ---------------------------------------------------------------------------
