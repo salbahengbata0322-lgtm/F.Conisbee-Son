@@ -19,7 +19,7 @@
 
 <!-- ======================= LOGIN SCREEN ======================= -->
 <div id="loginScreen" class="login-screen">
-  <div class="login-card">
+  <div class="login-card" id="loginStep1">
     <img src="icons/logo-full.png" alt="F. Conisbee & Son — Est. 1760" class="login-logo">
     <p class="subtitle">Staff Login</p>
     <div id="configWarning" class="config-warning hidden">
@@ -30,6 +30,15 @@
     <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
     <button id="loginBtn" class="btn btn-primary">Log In</button>
     <div id="loginError" class="error-text"></div>
+  </div>
+
+  <div class="login-card hidden" id="loginStep2">
+    <h1 style="font-size:20px;">Two-Factor Code</h1>
+    <p class="subtitle">Enter the 6-digit code from your authenticator app</p>
+    <input type="text" id="mfaCode" placeholder="123456" inputmode="numeric" maxlength="6" style="text-align:center;letter-spacing:4px;font-size:18px;">
+    <button id="mfaVerifyBtn" class="btn btn-primary">Verify</button>
+    <div id="mfaLoginError" class="error-text"></div>
+    <p class="note"><a href="#" id="mfaBackToLogin">← Back to login</a></p>
   </div>
 </div>
 
@@ -52,6 +61,7 @@
           <button class="tab-btn nav-dropdown-item" data-tab="turkeyPlanning">Turkey Planning</button>
           <button class="tab-btn nav-dropdown-item tab-warning" data-tab="unassigned">⚠ Unassigned</button>
           <button class="tab-btn nav-dropdown-item" data-tab="backup">💾 Backup</button>
+          <button class="tab-btn nav-dropdown-item" data-tab="security">🔒 Security</button>
         </div>
       </div>
     </nav>
@@ -437,6 +447,38 @@
       </p>
       <button id="backupBtn" class="btn btn-primary">💾 Download Full Backup</button>
       <div id="backupMsg" class="msg-box"></div>
+    </section>
+
+    <!-- ======================= SECURITY (2FA) ======================= -->
+    <section id="tab-security" class="tab-panel">
+      <h2>Security — Two-Factor Authentication</h2>
+      <p class="warning-text" style="background:#EAF1FB;border-color:#1F4E78;">
+        This protects <strong>your own login</strong> only — each staff member sets this up for
+        themselves while logged in. If you lose access to your authenticator app, someone with
+        access to the Supabase dashboard will need to manually remove your 2FA to let you back in
+        — there's no automatic "forgot my code" recovery.
+      </p>
+
+      <div id="mfaStatusBox" class="profile-box" style="grid-template-columns: 1fr;">
+        <div><span>Status</span><strong id="mfaStatusText">Checking…</strong></div>
+      </div>
+
+      <div id="mfaSetupArea" class="hidden" style="margin-top:16px;">
+        <h3>Scan this with your authenticator app</h3>
+        <p style="font-size:12px;color:#888;">Google Authenticator, Microsoft Authenticator, Authy, or similar.</p>
+        <div id="mfaQrCode" style="margin:12px 0;"></div>
+        <p style="font-size:12px;">Can't scan? Enter this key manually: <code id="mfaSecretText"></code></p>
+        <div class="form-grid">
+          <label>Enter the 6-digit code to confirm <input type="text" id="mfaEnrollCode" inputmode="numeric" maxlength="6"></label>
+          <button id="mfaConfirmBtn" class="btn btn-primary">Confirm & Enable</button>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button id="mfaSetupBtn" class="btn btn-primary">🔒 Set Up 2FA</button>
+        <button id="mfaRemoveBtn" class="btn btn-ghost hidden">✖ Remove 2FA</button>
+      </div>
+      <div id="mfaMsg" class="msg-box"></div>
     </section>
 
   </main>

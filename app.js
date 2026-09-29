@@ -43,6 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireCheckout();
   wireSalesHistory();
   wireBackup();
+  wireSecurity();
 
   // Resume session if already logged in (e.g. page refresh)
   sb.auth.getSession().then(({ data }) => {
@@ -60,10 +61,21 @@ function wireLoginScreen() {
   document.getElementById("loginPassword").addEventListener("keydown", (e) => {
     if (e.key === "Enter") doLogin();
   });
+  document.getElementById("mfaVerifyBtn").addEventListener("click", verifyMfaLogin);
+  document.getElementById("mfaCode").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") verifyMfaLogin();
+  });
+  document.getElementById("mfaBackToLogin").addEventListener("click", (e) => {
+    e.preventDefault();
+    document.getElementById("loginStep2").classList.add("hidden");
+    document.getElementById("loginStep1").classList.remove("hidden");
+  });
   document.getElementById("logoutBtn").addEventListener("click", async () => {
     await sb.auth.signOut();
     currentUser = null;
     document.getElementById("appShell").classList.add("hidden");
+    document.getElementById("loginStep1").classList.remove("hidden");
+    document.getElementById("loginStep2").classList.add("hidden");
     document.getElementById("loginScreen").classList.remove("hidden");
   });
 }
@@ -84,7 +96,45 @@ async function doLogin() {
     errEl.textContent = error.message;
     return;
   }
+
+  // Password is correct — check whether a second factor is required before
+  // granting full access (Supabase's Authenticator Assurance Level check).
+  const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+    document.getElementById("loginStep1").classList.add("hidden");
+    document.getElementById("loginStep2").classList.remove("hidden");
+    document.getElementById("mfaCode").value = "";
+    document.getElementById("mfaLoginError").textContent = "";
+    document.getElementById("mfaCode").focus();
+    return;
+  }
+
   onLoggedIn(data.user);
+}
+
+async function verifyMfaLogin() {
+  const code = document.getElementById("mfaCode").value.trim();
+  const errEl = document.getElementById("mfaLoginError");
+  errEl.textContent = "";
+
+  if (!/^\d{6}$/.test(code)) {
+    errEl.textContent = "Enter the 6-digit code from your authenticator app.";
+    return;
+  }
+
+  const { data: factors, error: factorErr } = await sb.auth.mfa.listFactors();
+  if (factorErr) { errEl.textContent = factorErr.message; return; }
+  const factor = (factors?.totp || [])[0];
+  if (!factor) { errEl.textContent = "No 2FA factor found."; return; }
+
+  const { data: challenge, error: challErr } = await sb.auth.mfa.challenge({ factorId: factor.id });
+  if (challErr) { errEl.textContent = challErr.message; return; }
+
+  const { data, error } = await sb.auth.mfa.verify({ factorId: factor.id, challengeId: challenge.id, code });
+  if (error) { errEl.textContent = "Incorrect code — try again."; return; }
+
+  const { data: userData } = await sb.auth.getUser();
+  onLoggedIn(userData.user);
 }
 
 function onLoggedIn(user) {
@@ -99,7 +149,7 @@ function onLoggedIn(user) {
 // Tabs
 // ---------------------------------------------------------------------------
 function wireTabs() {
-  const groupedTabs = ["dashboard", "salesHistory", "marketing", "turkeyPlanning", "unassigned", "backup"];
+  const groupedTabs = ["dashboard", "salesHistory", "marketing", "turkeyPlanning", "unassigned", "backup", "security"];
   const reportsToggle = document.getElementById("reportsToggle");
   const reportsMenu = document.getElementById("reportsMenu");
 
@@ -119,6 +169,7 @@ function wireTabs() {
       refreshAllData();
       if (btn.dataset.tab === "turkeyPlanning") renderTurkeyPlanning();
       if (btn.dataset.tab === "salesHistory") loadAndRenderSalesHistory();
+      if (btn.dataset.tab === "security") renderMfaStatus();
     });
   });
 
@@ -1321,4 +1372,85 @@ async function downloadFullBackup() {
     const counts = BACKUP_TABLES.map((t) => `${t}: ${backup[t].length}`).join(", ");
     showMsg("backupMsg", `Backup downloaded. Rows included — ${counts}.`, "success");
   }
+}
+
+// ---------------------------------------------------------------------------
+// SECURITY — Two-Factor Authentication (per-user, set up while logged in)
+// ---------------------------------------------------------------------------
+let pendingMfaFactorId = null;
+
+function wireSecurity() {
+  document.getElementById("mfaSetupBtn").addEventListener("click", startMfaEnrollment);
+  document.getElementById("mfaConfirmBtn").addEventListener("click", confirmMfaEnrollment);
+  document.getElementById("mfaRemoveBtn").addEventListener("click", removeMfa);
+}
+
+async function renderMfaStatus() {
+  const { data, error } = await sb.auth.mfa.listFactors();
+  const statusEl = document.getElementById("mfaStatusText");
+  if (error) { statusEl.textContent = "Couldn't check status."; return; }
+
+  const verified = (data?.totp || []).filter((f) => f.status === "verified");
+  document.getElementById("mfaSetupArea").classList.add("hidden");
+  document.getElementById("mfaMsg").textContent = "";
+
+  if (verified.length > 0) {
+    statusEl.textContent = "✅ 2FA is enabled on your account.";
+    document.getElementById("mfaSetupBtn").classList.add("hidden");
+    document.getElementById("mfaRemoveBtn").classList.remove("hidden");
+  } else {
+    statusEl.textContent = "2FA is not enabled yet.";
+    document.getElementById("mfaSetupBtn").classList.remove("hidden");
+    document.getElementById("mfaRemoveBtn").classList.add("hidden");
+  }
+}
+
+async function startMfaEnrollment() {
+  const { data, error } = await sb.auth.mfa.enroll({ factorType: "totp" });
+  if (error) { showMsg("mfaMsg", error.message, "error"); return; }
+
+  pendingMfaFactorId = data.id;
+  document.getElementById("mfaQrCode").innerHTML =
+    `<img src="${data.totp.qr_code}" alt="2FA QR code" style="max-width:180px;">`;
+  document.getElementById("mfaSecretText").textContent = data.totp.secret;
+  document.getElementById("mfaSetupArea").classList.remove("hidden");
+  document.getElementById("mfaEnrollCode").value = "";
+  showMsg("mfaMsg", "", "");
+}
+
+async function confirmMfaEnrollment() {
+  const code = document.getElementById("mfaEnrollCode").value.trim();
+  if (!/^\d{6}$/.test(code)) {
+    showMsg("mfaMsg", "Enter the 6-digit code shown in your authenticator app.", "error");
+    return;
+  }
+  if (!pendingMfaFactorId) {
+    showMsg("mfaMsg", "Click Set Up 2FA first.", "error");
+    return;
+  }
+
+  const { data: challenge, error: challErr } = await sb.auth.mfa.challenge({ factorId: pendingMfaFactorId });
+  if (challErr) { showMsg("mfaMsg", challErr.message, "error"); return; }
+
+  const { error } = await sb.auth.mfa.verify({ factorId: pendingMfaFactorId, challengeId: challenge.id, code });
+  if (error) { showMsg("mfaMsg", "Incorrect code — check your authenticator app and try again.", "error"); return; }
+
+  pendingMfaFactorId = null;
+  showMsg("mfaMsg", "2FA enabled. You'll be asked for a code next time you log in.", "success");
+  renderMfaStatus();
+}
+
+async function removeMfa() {
+  if (!confirm("Remove 2FA from your account? You'll only need your password to log in after this.")) return;
+
+  const { data, error } = await sb.auth.mfa.listFactors();
+  if (error) { showMsg("mfaMsg", error.message, "error"); return; }
+  const factor = (data?.totp || [])[0];
+  if (!factor) { showMsg("mfaMsg", "No 2FA factor found.", "error"); return; }
+
+  const { error: unenrollErr } = await sb.auth.mfa.unenroll({ factorId: factor.id });
+  if (unenrollErr) { showMsg("mfaMsg", unenrollErr.message, "error"); return; }
+
+  showMsg("mfaMsg", "2FA removed from your account.", "success");
+  renderMfaStatus();
 }
