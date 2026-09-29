@@ -51,6 +51,7 @@
           <button class="tab-btn nav-dropdown-item" data-tab="marketing">Marketing</button>
           <button class="tab-btn nav-dropdown-item" data-tab="turkeyPlanning">Turkey Planning</button>
           <button class="tab-btn nav-dropdown-item tab-warning" data-tab="unassigned">⚠ Unassigned</button>
+          <button class="tab-btn nav-dropdown-item" data-tab="backup">💾 Backup</button>
         </div>
       </div>
     </nav>
@@ -422,6 +423,20 @@
         <button id="resRefreshBtn" class="btn btn-ghost">🔄 Refresh List</button>
       </div>
       <div id="resMsg" class="msg-box"></div>
+    </section>
+
+    <!-- ======================= BACKUP ======================= -->
+    <section id="tab-backup" class="tab-panel">
+      <h2>Backup</h2>
+      <p class="warning-text" style="background:#EAF1FB;border-color:#1F4E78;">
+        Supabase's free tier doesn't include automated backups. Click the button below every so
+        often (once a week is a reasonable habit) and save the downloaded file somewhere safe — a
+        cloud drive folder, or emailed to yourself. It's a complete snapshot of every customer,
+        order, payment, sale, and product — everything needed to rebuild the database from scratch
+        if anything ever goes wrong.
+      </p>
+      <button id="backupBtn" class="btn btn-primary">💾 Download Full Backup</button>
+      <div id="backupMsg" class="msg-box"></div>
     </section>
 
   </main>

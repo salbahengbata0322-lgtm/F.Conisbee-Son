@@ -42,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireUnassigned();
   wireCheckout();
   wireSalesHistory();
+  wireBackup();
 
   // Resume session if already logged in (e.g. page refresh)
   sb.auth.getSession().then(({ data }) => {
@@ -98,7 +99,7 @@ function onLoggedIn(user) {
 // Tabs
 // ---------------------------------------------------------------------------
 function wireTabs() {
-  const groupedTabs = ["dashboard", "salesHistory", "marketing", "turkeyPlanning", "unassigned"];
+  const groupedTabs = ["dashboard", "salesHistory", "marketing", "turkeyPlanning", "unassigned", "backup"];
   const reportsToggle = document.getElementById("reportsToggle");
   const reportsMenu = document.getElementById("reportsMenu");
 
@@ -1274,4 +1275,50 @@ async function viewHistoricSale(saleId) {
   document.getElementById("shRcptDate").textContent = new Date(sale.sale_date).toLocaleString("en-GB");
   document.getElementById("shReceiptDoc").classList.remove("hidden");
   document.getElementById("shReceiptDoc").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ---------------------------------------------------------------------------
+// BACKUP — full data export, since Supabase's free tier has no automated
+// backups. This is a plain JSON snapshot of every table; if the database is
+// ever lost or corrupted, this file has everything needed to rebuild it.
+// ---------------------------------------------------------------------------
+const BACKUP_TABLES = [
+  "customers", "products", "turkey_pricing", "orders", "order_details",
+  "payments", "unassigned", "sales", "sale_items",
+];
+
+function wireBackup() {
+  document.getElementById("backupBtn").addEventListener("click", downloadFullBackup);
+}
+
+async function downloadFullBackup() {
+  showMsg("backupMsg", "Fetching all data…", "");
+  const backup = { exported_at: new Date().toISOString() };
+  let hadError = false;
+
+  for (const table of BACKUP_TABLES) {
+    const { data, error } = await sb.from(table).select("*");
+    if (error) {
+      console.error(table, error);
+      hadError = true;
+      backup[table] = { error: error.message };
+    } else {
+      backup[table] = data || [];
+    }
+  }
+
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ConisbeeBackup_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  if (hadError) {
+    showMsg("backupMsg", "Backup downloaded, but one or more tables had an error — check the browser console.", "error");
+  } else {
+    const counts = BACKUP_TABLES.map((t) => `${t}: ${backup[t].length}`).join(", ");
+    showMsg("backupMsg", `Backup downloaded. Rows included — ${counts}.`, "success");
+  }
 }
