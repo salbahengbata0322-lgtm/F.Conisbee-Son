@@ -25,6 +25,7 @@ body { margin: 0; font-family: var(--font); color: var(--text); background: #f5f
   box-shadow: 0 10px 40px rgba(0,0,0,0.25); text-align: center;
 }
 .login-card h1 { color: var(--primary); margin: 0 0 4px; font-size: 24px; }
+.login-logo { width: 100%; max-width: 240px; margin: 0 auto 4px; display: block; }
 .login-card .subtitle { color: #777; margin: 0 0 20px; font-size: 14px; }
 .login-card input { width: 100%; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
 .login-card .note { font-size: 11px; color: #999; margin-top: 16px; }
