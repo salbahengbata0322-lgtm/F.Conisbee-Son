@@ -112,8 +112,11 @@ function wireTabs() {
       reportsToggle.classList.toggle("active", groupedTabs.includes(btn.dataset.tab));
       reportsMenu.classList.add("hidden");
 
+      // Refresh shared data on every tab switch — not just after your own actions.
+      // Other staff on other devices may have changed orders/payments/sales since
+      // this page was last loaded, so don't trust the in-memory cache blindly.
+      refreshAllData();
       if (btn.dataset.tab === "turkeyPlanning") renderTurkeyPlanning();
-      if (btn.dataset.tab === "dashboard") renderTillSalesSummary();
       if (btn.dataset.tab === "salesHistory") loadAndRenderSalesHistory();
     });
   });
