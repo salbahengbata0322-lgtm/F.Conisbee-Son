@@ -39,15 +39,20 @@
   <header class="topbar">
     <div class="brand">F. Conisbee &amp; Son</div>
     <nav class="tabs">
-      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
       <button class="tab-btn" data-tab="checkout">Checkout</button>
-      <button class="tab-btn" data-tab="salesHistory">Sales History</button>
       <button class="tab-btn" data-tab="orderEntry">Order Entry</button>
-      <button class="tab-btn" data-tab="customerSearch">Customer Search</button>
       <button class="tab-btn" data-tab="invoice">Invoice</button>
-      <button class="tab-btn" data-tab="marketing">Marketing</button>
-      <button class="tab-btn" data-tab="turkeyPlanning">Turkey Planning</button>
-      <button class="tab-btn tab-warning" data-tab="unassigned">⚠ Unassigned</button>
+      <button class="tab-btn" data-tab="customerSearch">Customer Search</button>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle active" id="reportsToggle">Reports ▾</button>
+        <div class="nav-dropdown-menu hidden" id="reportsMenu">
+          <button class="tab-btn nav-dropdown-item active" data-tab="dashboard">Dashboard</button>
+          <button class="tab-btn nav-dropdown-item" data-tab="salesHistory">Sales History</button>
+          <button class="tab-btn nav-dropdown-item" data-tab="marketing">Marketing</button>
+          <button class="tab-btn nav-dropdown-item" data-tab="turkeyPlanning">Turkey Planning</button>
+          <button class="tab-btn nav-dropdown-item tab-warning" data-tab="unassigned">⚠ Unassigned</button>
+        </div>
+      </div>
     </nav>
     <div class="topbar-right">
       <span id="userEmail" class="user-email"></span>
@@ -420,6 +425,11 @@
     </section>
 
   </main>
+
+  <footer class="app-footer no-print">
+    F. Conisbee &amp; Son &nbsp;·&nbsp; Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ
+    &nbsp;·&nbsp; Tel: 01483 282073 &nbsp;·&nbsp; Email: <a href="mailto:info@fconisbee.com">info@fconisbee.com</a>
+  </footer>
 </div>
 
 <script src="app.js?v=2"></script>
