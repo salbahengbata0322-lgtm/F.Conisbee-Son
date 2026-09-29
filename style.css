@@ -121,6 +121,8 @@ h3 { color: var(--accent); font-size: 15px; margin-top: 28px; }
 /* ---------- Invoice ---------- */
 .invoice-doc { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 30px; margin-top: 16px; max-width: 700px; }
 .invoice-header h1 { color: var(--primary); margin: 0 0 4px; font-size: 22px; }
+.receipt-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.receipt-logo { width: 100%; max-width: 90px; flex-shrink: 0; display: block; }
 .invoice-header p { color: #666; font-size: 12px; margin: 0 0 16px; }
 .invoice-meta { display: flex; gap: 24px; border-top: 3px solid var(--primary); padding-top: 10px; margin-bottom: 16px; font-size: 13px; }
 .invoice-meta div { display: flex; flex-direction: column; }

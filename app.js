@@ -104,6 +104,7 @@ function wireTabs() {
       btn.classList.add("active");
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
       if (btn.dataset.tab === "turkeyPlanning") renderTurkeyPlanning();
+      if (btn.dataset.tab === "dashboard") renderTillSalesSummary();
     });
   });
 }
@@ -256,6 +257,56 @@ function renderDashboard() {
     .join("");
 
   renderOrderChart();
+  renderTillSalesSummary();
+}
+
+// ---------------------------------------------------------------------------
+// TILL SALES SUMMARY (Today / This Week / This Month / This Year)
+// ---------------------------------------------------------------------------
+function startOfDay(d) {
+  const x = new Date(d); x.setHours(0, 0, 0, 0); return x;
+}
+function startOfWeek(d) {
+  // Monday as the first day of the week
+  const x = startOfDay(d);
+  const day = x.getDay(); // 0=Sun..6=Sat
+  const diff = (day === 0 ? -6 : 1) - day;
+  x.setDate(x.getDate() + diff);
+  return x;
+}
+function startOfMonth(d) {
+  const x = startOfDay(d); x.setDate(1); return x;
+}
+function startOfYear(d) {
+  const x = startOfDay(d); x.setMonth(0, 1); return x;
+}
+
+async function renderTillSalesSummary() {
+  const { data, error } = await sb.from("sales").select("*");
+  if (error) { console.error(error); return; }
+  const sales = (data || []).filter((s) => s.status !== "Voided");
+
+  const now = new Date();
+  const boundaries = {
+    today: startOfDay(now), week: startOfWeek(now), month: startOfMonth(now), year: startOfYear(now),
+  };
+
+  const summarize = (since) => {
+    const matches = sales.filter((s) => new Date(s.sale_date) >= since);
+    return { count: matches.length, total: matches.reduce((sum, s) => sum + Number(s.subtotal || 0), 0) };
+  };
+
+  const periods = { Today: boundaries.today, Week: boundaries.week, Month: boundaries.month, Year: boundaries.year };
+  const idPrefix = { Today: "salesToday", Week: "salesWeek", Month: "salesMonth", Year: "salesYear" };
+  const labelText = {
+    Today: "Today", Week: "This Week", Month: "This Month", Year: "This Year",
+  };
+
+  Object.keys(periods).forEach((key) => {
+    const { count, total } = summarize(periods[key]);
+    document.getElementById(idPrefix[key] + "Value").textContent = money(total);
+    document.getElementById(idPrefix[key] + "Label").textContent = `${labelText[key]} (${count} sale${count === 1 ? "" : "s"})`;
+  });
 }
 
 let chartInstance = null;
@@ -907,6 +958,7 @@ async function completeSale() {
   document.getElementById("coTendered").value = "";
   showMsg("coMsg", "", "");
   refreshTodaySalesSummary();
+  renderTillSalesSummary();
 }
 
 function renderReceipt(saleId, paymentMethod, tendered, change, total) {

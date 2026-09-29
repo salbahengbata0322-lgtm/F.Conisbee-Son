@@ -58,7 +58,7 @@
 
     <!-- ======================= DASHBOARD ======================= -->
     <section id="tab-dashboard" class="tab-panel active">
-      <h2>Executive Dashboard</h2>
+      <h2>Sales Dashboard</h2>
       <div class="kpi-row">
         <div class="kpi-card"><div class="kpi-value" id="kpiTotalOrderValue">—</div><div class="kpi-label">Total Order Value</div></div>
         <div class="kpi-card"><div class="kpi-value" id="kpiDeposits">—</div><div class="kpi-label">Deposits Received</div></div>
@@ -73,6 +73,26 @@
       </table>
 
       <div class="chart-wrap"><canvas id="orderChart" height="90"></canvas></div>
+
+      <h3>Till Sales (Checkout)</h3>
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-value" id="salesTodayValue">—</div>
+          <div class="kpi-label" id="salesTodayLabel">Today</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value" id="salesWeekValue">—</div>
+          <div class="kpi-label" id="salesWeekLabel">This Week</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value" id="salesMonthValue">—</div>
+          <div class="kpi-label" id="salesMonthLabel">This Month</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value" id="salesYearValue">—</div>
+          <div class="kpi-label" id="salesYearLabel">This Year</div>
+        </div>
+      </div>
     </section>
 
     <!-- ======================= CHECKOUT ======================= -->
@@ -115,9 +135,12 @@
       <div class="no-print" id="coTodaySummary"></div>
 
       <div id="receiptDoc" class="invoice-doc hidden">
-        <div class="invoice-header">
-          <h1>F. Conisbee &amp; Son</h1>
-          <p>Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ · 01483 282073</p>
+        <div class="invoice-header receipt-header-row">
+          <div>
+            <h1>F. Conisbee &amp; Son</h1>
+            <p>Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ · 01483 282073</p>
+          </div>
+          <img src="icons/logo-full.png" alt="F. Conisbee & Son — Est. 1760" class="receipt-logo">
         </div>
         <div class="invoice-meta">
           <div><strong>Receipt</strong><span id="rcptNumber">—</span></div>
@@ -235,9 +258,12 @@
       </div>
 
       <div id="invoiceDoc" class="invoice-doc hidden">
-        <div class="invoice-header">
-          <h1>F. Conisbee &amp; Son</h1>
-          <p id="invCompanyLine">Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ · 01483 282073</p>
+        <div class="invoice-header receipt-header-row">
+          <div>
+            <h1>F. Conisbee &amp; Son</h1>
+            <p id="invCompanyLine">Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ · 01483 282073</p>
+          </div>
+          <img src="icons/logo-full.png" alt="F. Conisbee & Son — Est. 1760" class="receipt-logo">
         </div>
         <div class="invoice-meta">
           <div><strong>Invoice</strong><span id="invNumber">—</span></div>
