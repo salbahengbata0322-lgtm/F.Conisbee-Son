@@ -98,17 +98,32 @@ function onLoggedIn(user) {
 // Tabs
 // ---------------------------------------------------------------------------
 function wireTabs() {
+  const groupedTabs = ["dashboard", "salesHistory", "marketing", "turkeyPlanning", "unassigned"];
+  const reportsToggle = document.getElementById("reportsToggle");
+  const reportsMenu = document.getElementById("reportsMenu");
+
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+
+      reportsToggle.classList.toggle("active", groupedTabs.includes(btn.dataset.tab));
+      reportsMenu.classList.add("hidden");
+
       if (btn.dataset.tab === "turkeyPlanning") renderTurkeyPlanning();
       if (btn.dataset.tab === "dashboard") renderTillSalesSummary();
       if (btn.dataset.tab === "salesHistory") loadAndRenderSalesHistory();
     });
   });
+
+  reportsToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    reportsMenu.classList.toggle("hidden");
+  });
+  document.addEventListener("click", () => reportsMenu.classList.add("hidden"));
+  reportsMenu.addEventListener("click", (e) => e.stopPropagation());
 }
 
 // ---------------------------------------------------------------------------
