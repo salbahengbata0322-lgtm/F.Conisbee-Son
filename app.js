@@ -191,7 +191,17 @@ function populateOrderDropdown() {
 }
 
 function money(n) {
-  return "£" + (Number(n) || 0).toFixed(2);
+  const val = Number(n) || 0;
+  const fixed = val.toFixed(2);
+  return "£" + (fixed === "-0.00" ? "0.00" : fixed); // avoid displaying "-£0.00" from floating-point residue
+}
+
+// Paid / Partial / Unpaid, purely from the balance — independent of the order's
+// fulfilment Status field (Pending/Confirmed/etc.), which tracks something different.
+function paymentStatusFor(order) {
+  if (order.balance_due <= 0.005) return "Paid";
+  if (order.amount_paid > 0) return "Partial";
+  return "Unpaid";
 }
 
 // Small parenthetical annotation for invoice/line display: turkey type/mode,
@@ -252,7 +262,7 @@ function renderDashboard() {
   tbody.innerHTML = CACHE.orders
     .map(
       (o) => `<tr>
-        <td>${o.customer_name}</td><td>${o.status}</td><td>${o.delivery_method || ""}</td>
+        <td>${o.customer_name}</td><td>${o.status}</td><td>${paymentStatusFor(o)}</td><td>${o.delivery_method || ""}</td>
         <td>${money(o.subtotal)}</td><td>${money(o.amount_paid)}</td><td>${money(o.balance_due)}</td>
       </tr>`
     )
@@ -524,14 +534,17 @@ async function saveOrder() {
       });
     }
   });
-  if (lines.length === 0) { showMsg("oeMsg", "Add at least one line item.", "error"); return; }
+
+  const existing = CACHE.orders.find((o) => o.id === orderId);
+  if (lines.length === 0 && !existing) {
+    showMsg("oeMsg", "Add at least one line item.", "error"); return;
+  }
 
   const status = document.getElementById("oeStatus").value;
   const delivery = document.getElementById("oeDelivery").value;
   const collectionDate = document.getElementById("oeCollectionDate").value || null;
   const deliveryDate = document.getElementById("oeDeliveryDate").value || null;
 
-  const existing = CACHE.orders.find((o) => o.id === orderId);
   if (!existing) {
     const { error } = await sb.from("orders").insert({
       id: orderId, customer_id: custId, status, delivery_method: delivery,
@@ -544,20 +557,24 @@ async function saveOrder() {
     }).eq("id", orderId);
   }
 
-  const { data: existingLines } = await sb.from("order_details").select("line_no").eq("order_id", orderId);
-  let maxLine = 0;
-  (existingLines || []).forEach((l) => { if (l.line_no > maxLine) maxLine = l.line_no; });
+  if (lines.length > 0) {
+    const { data: existingLines } = await sb.from("order_details").select("line_no").eq("order_id", orderId);
+    let maxLine = 0;
+    (existingLines || []).forEach((l) => { if (l.line_no > maxLine) maxLine = l.line_no; });
 
-  const rows = lines.map((l, i) => ({
-    order_id: orderId, line_no: maxLine + i + 1, product_name: l.product, category: l.category,
-    weight_kg: l.weight, price_per_kg: l.price,
-    quantity: l.quantity, turkey_type: l.turkey_type, weight_mode: l.weight_mode,
-    weight_range_kg: l.weight_range_kg, turkey_number: l.turkey_number, stuffing_type: l.stuffing_type,
-  }));
-  const { error: insErr } = await sb.from("order_details").insert(rows);
-  if (insErr) { showMsg("oeMsg", insErr.message, "error"); return; }
+    const rows = lines.map((l, i) => ({
+      order_id: orderId, line_no: maxLine + i + 1, product_name: l.product, category: l.category,
+      weight_kg: l.weight, price_per_kg: l.price,
+      quantity: l.quantity, turkey_type: l.turkey_type, weight_mode: l.weight_mode,
+      weight_range_kg: l.weight_range_kg, turkey_number: l.turkey_number, stuffing_type: l.stuffing_type,
+    }));
+    const { error: insErr } = await sb.from("order_details").insert(rows);
+    if (insErr) { showMsg("oeMsg", insErr.message, "error"); return; }
+  }
 
-  showMsg("oeMsg", `Order ${orderId} saved (${lines.length} line(s)).`, "success");
+  showMsg("oeMsg", lines.length > 0
+    ? `Order ${orderId} saved (${lines.length} line(s)).`
+    : `Order ${orderId} updated (status/delivery only — no new lines added).`, "success");
   await loadOrderBalances();
   populateOrderDropdown();
   renderDashboard();
@@ -607,7 +624,7 @@ function renderCustomerProfile() {
 
   const orders = CACHE.orders.filter((o) => o.customer_id === custId);
   document.querySelector("#csOrdersTable tbody").innerHTML = orders
-    .map((o) => `<tr><td>${o.id}</td><td>${o.status}</td><td>${money(o.subtotal)}</td><td>${money(o.amount_paid)}</td><td>${money(o.balance_due)}</td></tr>`)
+    .map((o) => `<tr><td>${o.id}</td><td>${o.status}</td><td>${paymentStatusFor(o)}</td><td>${money(o.subtotal)}</td><td>${money(o.amount_paid)}</td><td>${money(o.balance_due)}</td></tr>`)
     .join("");
 }
 
@@ -1104,6 +1121,7 @@ async function renderTurkeyPlanning() {
 // SALES HISTORY
 // ---------------------------------------------------------------------------
 let allSalesCache = [];
+let currentSalesHistoryView = [];
 
 function wireSalesHistory() {
   document.getElementById("shFilterBtn").addEventListener("click", applySalesHistoryFilter);
@@ -1112,6 +1130,7 @@ function wireSalesHistory() {
     document.getElementById("shToDate").value = "";
     renderSalesHistoryTable(allSalesCache);
   });
+  document.getElementById("shExportBtn").addEventListener("click", exportSalesHistoryCsv);
   document.getElementById("shRcptPrintBtn").addEventListener("click", () => window.print());
   document.getElementById("shRcptCloseBtn").addEventListener("click", () => {
     document.getElementById("shReceiptDoc").classList.add("hidden");
@@ -1137,7 +1156,27 @@ function applySalesHistoryFilter() {
   renderSalesHistoryTable(filtered);
 }
 
+function exportSalesHistoryCsv() {
+  if (currentSalesHistoryView.length === 0) { alert("No sales to export for the current filter."); return; }
+  const csvField = (v) => `"${String(v).replace(/"/g, '""')}"`; // quote every field so commas inside values (e.g. in the date) can't corrupt columns
+  const header = "SaleID,DateTime,PaymentMethod,Subtotal,AmountTendered,ChangeGiven\n";
+  const rows = currentSalesHistoryView
+    .map((s) => [
+      s.id, new Date(s.sale_date).toLocaleString("en-GB"), s.payment_method,
+      s.subtotal, s.amount_tendered ?? "", s.change_given ?? "",
+    ].map(csvField).join(","))
+    .join("\n");
+  const blob = new Blob([header + rows], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `SalesHistory_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function renderSalesHistoryTable(sales) {
+  currentSalesHistoryView = sales;
   const tbody = document.querySelector("#shTable tbody");
   tbody.innerHTML = sales.map((s) => `
     <tr class="sh-row" data-sale-id="${s.id}" style="cursor:pointer;">
