@@ -123,7 +123,8 @@ h3 { color: var(--accent); font-size: 15px; margin-top: 28px; }
 .invoice-header h1 { color: var(--primary); margin: 0 0 4px; font-size: 22px; }
 .receipt-header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .receipt-logo { width: 100%; max-width: 90px; flex-shrink: 0; display: block; }
-.invoice-header p { color: #666; font-size: 12px; margin: 0 0 16px; }
+.invoice-header p { color: #666; font-size: 12px; margin: 0 0 16px; line-height: 1.6; }
+.invoice-header p a { color: var(--primary); text-decoration: none; }
 .invoice-meta { display: flex; gap: 24px; border-top: 3px solid var(--primary); padding-top: 10px; margin-bottom: 16px; font-size: 13px; }
 .invoice-meta div { display: flex; flex-direction: column; }
 .invoice-meta strong { font-size: 10px; text-transform: uppercase; color: #888; }
