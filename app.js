@@ -192,7 +192,11 @@ function populateOrderDropdown() {
 
 function money(n) {
   const val = Number(n) || 0;
-  const fixed = val.toFixed(2);
+  // Round properly before formatting — plain toFixed(2) can round numbers that
+  // sit exactly on a boundary (e.g. 42.675) the wrong way due to how floating-point
+  // numbers are represented, which showed up as spurious £0.01 mismatches.
+  const rounded = Math.round((val + Number.EPSILON) * 100) / 100;
+  const fixed = rounded.toFixed(2);
   return "£" + (fixed === "-0.00" ? "0.00" : fixed); // avoid displaying "-£0.00" from floating-point residue
 }
 
@@ -624,7 +628,7 @@ function renderCustomerProfile() {
 
   const orders = CACHE.orders.filter((o) => o.customer_id === custId);
   document.querySelector("#csOrdersTable tbody").innerHTML = orders
-    .map((o) => `<tr><td>${o.id}</td><td>${o.status}</td><td>${paymentStatusFor(o)}</td><td>${money(o.subtotal)}</td><td>${money(o.amount_paid)}</td><td>${money(o.balance_due)}</td></tr>`)
+    .map((o) => `<tr><td>${o.id}</td><td>${o.status}</td><td>${paymentStatusFor(o)}</td><td>${o.delivery_method || ""}</td><td>${money(o.subtotal)}</td><td>${money(o.amount_paid)}</td><td>${money(o.balance_due)}</td></tr>`)
     .join("");
 }
 
@@ -653,6 +657,18 @@ async function recordPayment() {
   showMsg("csMsg", `${paymentId} recorded (${type}, ${money(amount)}).`, "success");
   document.getElementById("csPayAmount").value = "";
   await loadOrderBalances();
+
+  // Once an order is fully paid, move it along automatically — but only from an
+  // early-stage status. Never overrides a status someone already advanced further
+  // (Ready/Collected/Delivered) or explicitly set to Cancelled.
+  if (orderExists) {
+    const order = CACHE.orders.find((o) => o.id === orderId);
+    if (order && order.balance_due <= 0.005 && ["Pending", "Confirmed"].includes(order.status)) {
+      await sb.from("orders").update({ status: "Ready" }).eq("id", orderId);
+      await loadOrderBalances();
+    }
+  }
+
   renderCustomerProfile();
   renderDashboard();
 }
