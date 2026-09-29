@@ -7,10 +7,10 @@
 // 4. Paste them below
 // ============================================================================
 const SUPABASE_URL = "https://itqotgvzqqavarpbmfxl.supabase.co";       // e.g. https://abcdefgh.supabase.co
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cW90Z3Z6cXFhdmFycGJtZnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MjI4ODUsImV4cCI6MjEwNjE5ODg4NX0.a_6rcmb1sPzy_OizhWajGiyAbOkIUnK7sysXWROU6p0";      // the long "anon public" key
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cW90Z3Z6cXFhdmFycGJtZnhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MjI4ODUsImV4cCI6MjE1ODA1ODg0NX0.a_6rcmb1sPzy_OizhWajGiyAbOkIUnK7sysXWROU6p0";      // the long "anon public" key
 // ============================================================================
 
-let supabase = null;
+let sb = null;
 let currentUser = null;
 
 // In-memory caches, refreshed on load / after writes
@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("loginBtn").disabled = true;
     return;
   }
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   wireLoginScreen();
   wireTabs();
@@ -43,7 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireCheckout();
 
   // Resume session if already logged in (e.g. page refresh)
-  supabase.auth.getSession().then(({ data }) => {
+  sb.auth.getSession().then(({ data }) => {
     if (data.session) {
       onLoggedIn(data.session.user);
     }
@@ -59,7 +59,7 @@ function wireLoginScreen() {
     if (e.key === "Enter") doLogin();
   });
   document.getElementById("logoutBtn").addEventListener("click", async () => {
-    await supabase.auth.signOut();
+    await sb.auth.signOut();
     currentUser = null;
     document.getElementById("appShell").classList.add("hidden");
     document.getElementById("loginScreen").classList.remove("hidden");
@@ -77,7 +77,7 @@ async function doLogin() {
     return;
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) {
     errEl.textContent = error.message;
     return;
@@ -103,6 +103,7 @@ function wireTabs() {
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+      if (btn.dataset.tab === "turkeyPlanning") renderTurkeyPlanning();
     });
   });
 }
@@ -123,34 +124,34 @@ async function refreshAllData() {
 }
 
 async function loadCustomers() {
-  const { data, error } = await supabase.from("customers").select("*").order("id");
+  const { data, error } = await sb.from("customers").select("*").order("id");
   if (error) { console.error(error); return; }
   CACHE.customers = data || [];
 }
 
 async function loadProducts() {
-  const { data, error } = await supabase.from("products").select("*").order("product_name");
+  const { data, error } = await sb.from("products").select("*").order("product_name");
   if (error) { console.error(error); return; }
   CACHE.products = data || [];
 }
 
 async function loadTurkeyTiers() {
-  const { data, error } = await supabase.from("turkey_pricing").select("*").order("weight_min");
+  const { data, error } = await sb.from("turkey_pricing").select("*").order("weight_min");
   if (error) { console.error(error); return; }
   CACHE.turkeyTiers = data || [];
 }
 
 async function loadUnassigned() {
-  const { data, error } = await supabase.from("unassigned").select("*").order("id");
+  const { data, error } = await sb.from("unassigned").select("*").order("id");
   if (error) { console.error(error); return; }
   CACHE.unassigned = data || [];
 }
 
 async function loadOrderBalances() {
-  const { data, error } = await supabase.from("order_balances").select("*");
+  const { data, error } = await sb.from("order_balances").select("*");
   if (error) { console.error(error); return; }
   const balances = data || [];
-  const { data: orders, error: ordErr } = await supabase.from("orders").select("*");
+  const { data: orders, error: ordErr } = await sb.from("orders").select("*");
   if (ordErr) { console.error(ordErr); return; }
 
   CACHE.orders = (orders || []).map((o) => {
@@ -218,7 +219,7 @@ function lookupPricePerKg(productName, weightKg) {
 }
 
 async function nextSequentialId(table, prefix, digits) {
-  const { data, error } = await supabase.from(table).select("id");
+  const { data, error } = await sb.from(table).select("id");
   if (error) { console.error(error); return prefix + "001"; }
   let max = 0;
   (data || []).forEach((row) => {
@@ -321,7 +322,7 @@ async function createCustomerInline() {
     return;
   }
   const newId = await nextSequentialId("customers", "C", 3);
-  const { error } = await supabase.from("customers").insert({
+  const { error } = await sb.from("customers").insert({
     id: newId, name, telephone: phone, delivery_method: "Unknown", marketing_opt_in: "Y",
   });
   if (error) { showMsg("oeMsg", error.message, "error"); return; }
@@ -446,7 +447,9 @@ async function saveOrder() {
 
   const lines = [];
   document.querySelectorAll("#oeLinesTable tbody tr.oe-line-row").forEach((tr) => {
-    const product = tr.querySelector(".oe-product").value;
+    const productSel = tr.querySelector(".oe-product");
+    const product = productSel.value;
+    const category = productSel.selectedOptions[0]?.dataset.category || null;
     const weight = Number(tr.querySelector(".oe-weight").value) || 0;
     const price = Number(tr.querySelector(".oe-price").value) || 0;
     const qtyVal = tr.querySelector(".oe-qty").value;
@@ -458,7 +461,7 @@ async function saveOrder() {
     const stuffingType = detailTr?.querySelector(".oe-stuffing-type")?.value || null;
     if (product && weight > 0) {
       lines.push({
-        product, weight, price,
+        product, category, weight, price,
         quantity: qtyVal ? Number(qtyVal) : null,
         turkey_type: turkeyType || null,
         weight_mode: weightMode || null,
@@ -477,27 +480,28 @@ async function saveOrder() {
 
   const existing = CACHE.orders.find((o) => o.id === orderId);
   if (!existing) {
-    const { error } = await supabase.from("orders").insert({
+    const { error } = await sb.from("orders").insert({
       id: orderId, customer_id: custId, status, delivery_method: delivery,
       collection_date: collectionDate, delivery_date: deliveryDate,
     });
     if (error) { showMsg("oeMsg", error.message, "error"); return; }
   } else {
-    await supabase.from("orders").update({
+    await sb.from("orders").update({
       status, delivery_method: delivery, collection_date: collectionDate, delivery_date: deliveryDate,
     }).eq("id", orderId);
   }
 
-  const { data: existingLines } = await supabase.from("order_details").select("line_no").eq("order_id", orderId);
+  const { data: existingLines } = await sb.from("order_details").select("line_no").eq("order_id", orderId);
   let maxLine = 0;
   (existingLines || []).forEach((l) => { if (l.line_no > maxLine) maxLine = l.line_no; });
 
   const rows = lines.map((l, i) => ({
-    order_id: orderId, line_no: maxLine + i + 1, product_name: l.product, weight_kg: l.weight, price_per_kg: l.price,
+    order_id: orderId, line_no: maxLine + i + 1, product_name: l.product, category: l.category,
+    weight_kg: l.weight, price_per_kg: l.price,
     quantity: l.quantity, turkey_type: l.turkey_type, weight_mode: l.weight_mode,
     weight_range_kg: l.weight_range_kg, turkey_number: l.turkey_number, stuffing_type: l.stuffing_type,
   }));
-  const { error: insErr } = await supabase.from("order_details").insert(rows);
+  const { error: insErr } = await sb.from("order_details").insert(rows);
   if (insErr) { showMsg("oeMsg", insErr.message, "error"); return; }
 
   showMsg("oeMsg", `Order ${orderId} saved (${lines.length} line(s)).`, "success");
@@ -571,7 +575,7 @@ async function recordPayment() {
   const storedAmount = type === "Refund" ? amount : -amount;
   const paymentId = await nextSequentialId("payments", "PAY", 3);
 
-  const { error } = await supabase.from("payments").insert({
+  const { error } = await sb.from("payments").insert({
     id: paymentId, customer_id: custId, order_id: orderExists ? orderId : null, amount: storedAmount, type,
   });
   if (error) { showMsg("csMsg", error.message, "error"); return; }
@@ -599,7 +603,7 @@ async function generateInvoice() {
   if (!order) { showMsg("invMsg", "Order not found.", "error"); return; }
   const cust = CACHE.customers.find((c) => c.id === order.customer_id);
 
-  const { data: lines, error } = await supabase.from("order_details").select("*").eq("order_id", orderId).order("line_no");
+  const { data: lines, error } = await sb.from("order_details").select("*").eq("order_id", orderId).order("line_no");
   if (error) { showMsg("invMsg", error.message, "error"); return; }
 
   document.getElementById("invNumber").textContent = "INV-" + order.customer_id;
@@ -707,7 +711,7 @@ async function resolveUnassigned() {
   let custId = existingCustId;
   if (!custId) {
     custId = await nextSequentialId("customers", "C", 3);
-    const { error } = await supabase.from("customers").insert({
+    const { error } = await sb.from("customers").insert({
       id: custId, name: newName, telephone: newPhone, delivery_method: "Unknown", marketing_opt_in: "Y",
       notes: "Created via Unassigned Resolution on " + new Date().toISOString().slice(0, 10),
     });
@@ -715,27 +719,29 @@ async function resolveUnassigned() {
   }
 
   const orderId = "ORD-" + custId;
-  const { data: existingOrder } = await supabase.from("orders").select("id").eq("id", orderId).maybeSingle();
+  const { data: existingOrder } = await sb.from("orders").select("id").eq("id", orderId).maybeSingle();
   if (!existingOrder) {
-    const { error } = await supabase.from("orders").insert({
+    const { error } = await sb.from("orders").insert({
       id: orderId, customer_id: custId, status: "Pending", delivery_method: "Unknown",
       notes: "Includes a line resolved from Unassigned Review",
     });
     if (error) { showMsg("resMsg", error.message, "error"); return; }
   }
 
-  const { data: existingLines } = await supabase.from("order_details").select("line_no").eq("order_id", orderId);
+  const { data: existingLines } = await sb.from("order_details").select("line_no").eq("order_id", orderId);
   let maxLine = 0;
   (existingLines || []).forEach((l) => { if (l.line_no > maxLine) maxLine = l.line_no; });
 
-  const { error: insErr } = await supabase.from("order_details").insert({
-    order_id: orderId, line_no: maxLine + 1, product_name: row.product, weight_kg: row.weight_kg, price_per_kg: row.price_per_kg,
+  const { error: insErr } = await sb.from("order_details").insert({
+    order_id: orderId, line_no: maxLine + 1, product_name: row.product,
+    category: CACHE.products.find((p) => p.product_name === row.product)?.category || null,
+    weight_kg: row.weight_kg, price_per_kg: row.price_per_kg,
     source_item_no: row.item_no,
     flag: `Resolved from Unassigned Review on ${new Date().toISOString().slice(0, 10)} (originally on ${row.source_sheet} sheet)`,
   });
   if (insErr) { showMsg("resMsg", insErr.message, "error"); return; }
 
-  const { error: delErr } = await supabase.from("unassigned").delete().eq("id", row.id);
+  const { error: delErr } = await sb.from("unassigned").delete().eq("id", row.id);
   if (delErr) { showMsg("resMsg", delErr.message, "error"); return; }
 
   document.getElementById("resNewName").value = "";
@@ -882,7 +888,7 @@ async function completeSale() {
   }
 
   const saleId = await nextSequentialId("sales", "SALE-", 4);
-  const { error: saleErr } = await supabase.from("sales").insert({
+  const { error: saleErr } = await sb.from("sales").insert({
     id: saleId, sale_date: new Date().toISOString(), payment_method: paymentMethod,
     amount_tendered: tendered, change_given: change, subtotal: total,
   });
@@ -892,7 +898,7 @@ async function completeSale() {
     sale_id: saleId, line_no: i + 1, product_name: item.product, mode: item.mode,
     weight_kg: item.weight, quantity: item.qty, price: item.price,
   }));
-  const { error: itemsErr } = await supabase.from("sale_items").insert(rows);
+  const { error: itemsErr } = await sb.from("sale_items").insert(rows);
   if (itemsErr) { showMsg("coMsg", itemsErr.message, "error"); return; }
 
   renderReceipt(saleId, paymentMethod, tendered, change, total);
@@ -931,9 +937,105 @@ async function refreshTodaySalesSummary() {
   const el = document.getElementById("coTodaySummary");
   if (!el) return;
   const todayStr = new Date().toISOString().slice(0, 10);
-  const { data, error } = await supabase.from("sales").select("*");
+  const { data, error } = await sb.from("sales").select("*");
   if (error) { console.error(error); return; }
   const todaySales = (data || []).filter((s) => (s.sale_date || "").slice(0, 10) === todayStr && s.status !== "Voided");
   const todayTotal = todaySales.reduce((s, sale) => s + Number(sale.subtotal || 0), 0);
   el.textContent = `Today: ${todaySales.length} sale(s), ${money(todayTotal)} total.`;
+}
+
+// ---------------------------------------------------------------------------
+// TURKEY ALLOCATION PLANNING
+// ---------------------------------------------------------------------------
+// 0.5kg-wide weight bands, matching the shop's existing paper/Excel planning
+// sheet. Grouped into three bands (small/medium/large) purely for readability
+// — this grouping is independent of the turkey_pricing tiers, which price in
+// three much broader bands.
+const TURKEY_WEIGHT_BANDS = [
+  { label: "<3.99", min: 0, max: 3.99, group: "small" },
+  { label: "4.0-4.49", min: 4.0, max: 4.49, group: "small" },
+  { label: "4.5-4.99", min: 4.5, max: 4.99, group: "small" },
+  { label: "5.0-5.49", min: 5.0, max: 5.49, group: "small" },
+  { label: "5.5-5.99", min: 5.5, max: 5.99, group: "small" },
+  { label: "6.0-6.49", min: 6.0, max: 6.49, group: "small" },
+  { label: "6.5-6.99", min: 6.5, max: 6.99, group: "small" },
+  { label: "7.0-7.49", min: 7.0, max: 7.49, group: "small" },
+  { label: "7.5-7.99", min: 7.5, max: 7.99, group: "small" },
+  { label: "8.00-8.49", min: 8.0, max: 8.49, group: "medium" },
+  { label: "8.5-8.99", min: 8.5, max: 8.99, group: "medium" },
+  { label: "9.0-9.49", min: 9.0, max: 9.49, group: "large" },
+  { label: "9.5-9.99", min: 9.5, max: 9.99, group: "large" },
+  { label: "10.0-10.49", min: 10.0, max: 10.49, group: "large" },
+  { label: "10.5-10.99", min: 10.5, max: 10.99, group: "large" },
+  { label: ">11.0", min: 11.0, max: 999, group: "large" },
+];
+
+async function loadAllOrderDetails() {
+  const { data, error } = await sb.from("order_details").select("*");
+  if (error) { console.error(error); return []; }
+  return data || [];
+}
+
+function bucketByWeight(lines) {
+  return TURKEY_WEIGHT_BANDS.map((band) => {
+    const matches = lines.filter((l) => Number(l.weight_kg) >= band.min && Number(l.weight_kg) <= band.max);
+    return { ...band, ordered: matches.length, allocated: matches.filter((l) => l.turkey_number).length };
+  });
+}
+
+function renderBandTable(tableId, buckets, showAllocation) {
+  const table = document.getElementById(tableId);
+  const tbody = table.querySelector("tbody");
+  const tfoot = table.querySelector("tfoot");
+
+  tbody.innerHTML = buckets.map((b) => {
+    if (showAllocation) {
+      const left = b.ordered - b.allocated;
+      return `<tr><td>${b.label}</td><td>${b.ordered}</td><td>${b.allocated}</td><td>${left}</td></tr>`;
+    }
+    return `<tr><td>${b.label}</td><td>${b.ordered}</td></tr>`;
+  }).join("");
+
+  const totalOrdered = buckets.reduce((s, b) => s + b.ordered, 0);
+  if (showAllocation) {
+    const totalAllocated = buckets.reduce((s, b) => s + b.allocated, 0);
+    tfoot.innerHTML = `<tr><td>TOTAL</td><td>${totalOrdered}</td><td>${totalAllocated}</td><td>${totalOrdered - totalAllocated}</td></tr>`;
+  } else {
+    tfoot.innerHTML = `<tr><td>TOTAL</td><td>${totalOrdered}</td></tr>`;
+  }
+}
+
+let turkeyWholeChartInstance = null;
+let turkeyMiscChartInstance = null;
+
+function renderBandChart(canvasId, buckets, existingInstance) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !window.Chart) return existingInstance;
+  if (existingInstance) existingInstance.destroy();
+  return new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: buckets.map((b) => b.label),
+      datasets: [{ label: "Ordered", data: buckets.map((b) => b.ordered), backgroundColor: "#8B1E1E" }],
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+    },
+  });
+}
+
+async function renderTurkeyPlanning() {
+  const allLines = await loadAllOrderDetails();
+  const wholeLines = allLines.filter((l) => l.category === "Turkey");
+  const miscLines = allLines.filter((l) => l.category === "Turkey Misc");
+
+  const wholeBuckets = bucketByWeight(wholeLines);
+  const miscBuckets = bucketByWeight(miscLines);
+
+  renderBandTable("turkeyWholeTable", wholeBuckets, true);
+  renderBandTable("turkeyMiscTable", miscBuckets, false);
+
+  turkeyWholeChartInstance = renderBandChart("turkeyWholeChart", wholeBuckets, turkeyWholeChartInstance);
+  turkeyMiscChartInstance = renderBandChart("turkeyMiscChart", miscBuckets, turkeyMiscChartInstance);
 }
