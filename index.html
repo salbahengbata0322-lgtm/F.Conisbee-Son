@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>F. Conisbee &amp; Son — Christmas Orders</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#8B1E1E">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Conisbee Orders">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ======================= LOGIN SCREEN ======================= -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <h1>F. Conisbee &amp; Son</h1>
+    <p class="subtitle">Christmas Orders — Staff Login</p>
+    <div id="configWarning" class="config-warning hidden">
+      ⚠ Supabase isn't configured yet. Open <code>app.js</code> and set
+      <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> at the top of the file.
+    </div>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="username">
+    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+    <button id="loginBtn" class="btn btn-primary">Log In</button>
+    <div id="loginError" class="error-text"></div>
+    <p class="note">No self-signup — ask whoever set this up to create your login in the Supabase dashboard.</p>
+  </div>
+</div>
+
+<!-- ======================= APP SHELL ======================= -->
+<div id="appShell" class="app-shell hidden">
+
+  <header class="topbar">
+    <div class="brand">F. Conisbee &amp; Son</div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="checkout">Checkout</button>
+      <button class="tab-btn" data-tab="orderEntry">Order Entry</button>
+      <button class="tab-btn" data-tab="customerSearch">Customer Search</button>
+      <button class="tab-btn" data-tab="invoice">Invoice</button>
+      <button class="tab-btn" data-tab="marketing">Marketing</button>
+      <button class="tab-btn" data-tab="turkeyPlanning">Turkey Planning</button>
+      <button class="tab-btn tab-warning" data-tab="unassigned">⚠ Unassigned</button>
+    </nav>
+    <div class="topbar-right">
+      <span id="userEmail" class="user-email"></span>
+      <button id="logoutBtn" class="btn btn-ghost">Log out</button>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <!-- ======================= DASHBOARD ======================= -->
+    <section id="tab-dashboard" class="tab-panel active">
+      <h2>Executive Dashboard</h2>
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-value" id="kpiTotalOrderValue">—</div><div class="kpi-label">Total Order Value</div></div>
+        <div class="kpi-card"><div class="kpi-value" id="kpiDeposits">—</div><div class="kpi-label">Deposits Received</div></div>
+        <div class="kpi-card"><div class="kpi-value" id="kpiBalance">—</div><div class="kpi-label">Balance Outstanding</div></div>
+        <div class="kpi-card kpi-warning"><div class="kpi-value" id="kpiUnassigned">—</div><div class="kpi-label">⚠ Unassigned</div></div>
+      </div>
+
+      <h3>Orders</h3>
+      <table class="data-table" id="dashOrdersTable">
+        <thead><tr><th>Customer</th><th>Status</th><th>Delivery</th><th>Subtotal</th><th>Paid</th><th>Balance Due</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="chart-wrap"><canvas id="orderChart" height="90"></canvas></div>
+    </section>
+
+    <!-- ======================= CHECKOUT ======================= -->
+    <section id="tab-checkout" class="tab-panel">
+      <h2 class="no-print">Checkout</h2>
+
+      <div class="form-grid no-print">
+        <label>Product <select id="coProduct"></select></label>
+        <label>Mode
+          <select id="coMode"><option value="Weight">By Weight</option><option value="Qty">By Quantity</option></select>
+        </label>
+        <label id="coWeightLabel">Weight (KG) <input type="number" id="coWeight" step="0.001" min="0"></label>
+        <label id="coQtyLabel" class="hidden">Quantity <input type="number" id="coQty" step="1" min="0"></label>
+        <label>Price <input type="number" id="coPrice" step="0.01" min="0"></label>
+        <button id="coAddBtn" class="btn btn-secondary">+ Add to Cart</button>
+      </div>
+
+      <table class="data-table no-print" id="coCartTable">
+        <thead><tr><th>Product</th><th>Weight/Qty</th><th>Price</th><th>Line Total</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="totals-box no-print" id="coTotalsBox">
+        <div class="balance"><span>TOTAL DUE</span><strong id="coTotal">£0.00</strong></div>
+      </div>
+
+      <div class="form-grid no-print">
+        <label>Payment Method
+          <select id="coPaymentMethod"><option>Cash</option><option>Card</option></select>
+        </label>
+        <label id="coTenderedLabel">Amount Tendered (£) <input type="number" id="coTendered" step="0.01" min="0"></label>
+        <label>Change Due <input type="text" id="coChange" readonly value="£0.00"></label>
+      </div>
+
+      <div class="button-row no-print">
+        <button id="coCompleteBtn" class="btn btn-primary">✅ Complete Sale</button>
+        <button id="coClearBtn" class="btn btn-ghost">✖ Clear Cart</button>
+      </div>
+      <div id="coMsg" class="msg-box no-print"></div>
+      <div class="no-print" id="coTodaySummary"></div>
+
+      <div id="receiptDoc" class="invoice-doc hidden">
+        <div class="invoice-header">
+          <h1>F. Conisbee &amp; Son</h1>
+          <p>Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ · 01483 282073</p>
+        </div>
+        <div class="invoice-meta">
+          <div><strong>Receipt</strong><span id="rcptNumber">—</span></div>
+          <div><strong>Date/Time</strong><span id="rcptDate">—</span></div>
+          <div><strong>Payment</strong><span id="rcptPayment">—</span></div>
+        </div>
+        <table class="data-table invoice-items">
+          <thead><tr><th>Product</th><th>Weight/Qty</th><th>Price</th><th>Total</th></tr></thead>
+          <tbody id="rcptItemsBody"></tbody>
+        </table>
+        <div class="totals-box">
+          <div class="balance"><span>TOTAL</span><strong id="rcptTotal">£0.00</strong></div>
+          <div id="rcptCashRow"><span>Tendered</span><strong id="rcptTendered">£0.00</strong></div>
+          <div id="rcptChangeRow"><span>Change</span><strong id="rcptChange">£0.00</strong></div>
+        </div>
+        <p class="no-print" style="margin-top:16px;">
+          <button id="rcptPrintBtn" class="btn btn-secondary">🖨 Print Receipt</button>
+          <button id="rcptNewSaleBtn" class="btn btn-primary">🛒 New Sale</button>
+        </p>
+      </div>
+    </section>
+
+    <!-- ======================= ORDER ENTRY ======================= -->
+    <section id="tab-orderEntry" class="tab-panel">
+      <h2>Order Entry</h2>
+
+      <div class="form-grid">
+        <label>Customer
+          <select id="oeCustomer"></select>
+        </label>
+        <label>Order ID <input type="text" id="oeOrderId" readonly placeholder="auto"></label>
+        <label>Delivery Method
+          <select id="oeDelivery"><option>Unknown</option><option>Collection</option><option>Delivery</option></select>
+        </label>
+        <label>Status
+          <select id="oeStatus"><option>Pending</option><option>Confirmed</option><option>Ready</option><option>Collected</option><option>Delivered</option><option>Cancelled</option></select>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label>Collection Date <input type="date" id="oeCollectionDate"></label>
+        <label>Delivery Date <input type="date" id="oeDeliveryDate"></label>
+      </div>
+
+      <div class="new-customer-toggle">
+        <button id="oeNewCustomerBtn" class="btn btn-ghost small">+ New customer instead</button>
+        <div id="oeNewCustomerForm" class="hidden new-customer-form">
+          <input type="text" id="oeNewName" placeholder="Full name">
+          <input type="text" id="oeNewPhone" placeholder="Phone">
+          <button id="oeCreateCustomerBtn" class="btn btn-secondary small">Create</button>
+        </div>
+      </div>
+
+      <h3>Line Items</h3>
+      <table class="data-table" id="oeLinesTable">
+        <thead><tr><th>Product</th><th>Weight (KG)</th><th>Qty</th><th>Price/KG</th><th>Line Total</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <button id="oeAddLineBtn" class="btn btn-ghost small">+ Add line</button>
+
+      <div class="totals-box">
+        <div><span>Subtotal</span><strong id="oeSubtotal">£0.00</strong></div>
+        <div><span>Deposit Paid</span><strong id="oeDeposit">£0.00</strong></div>
+        <div class="balance"><span>Balance Due</span><strong id="oeBalance">£0.00</strong></div>
+      </div>
+
+      <div class="button-row">
+        <button id="oeSaveBtn" class="btn btn-primary">💾 Save Order</button>
+        <button id="oeInvoiceBtn" class="btn btn-secondary">🧾 Generate Invoice</button>
+        <button id="oeClearBtn" class="btn btn-ghost">✖ Clear Form</button>
+      </div>
+      <div id="oeMsg" class="msg-box"></div>
+    </section>
+
+    <!-- ======================= CUSTOMER SEARCH ======================= -->
+    <section id="tab-customerSearch" class="tab-panel">
+      <h2>Customer Search &amp; CRM Profile</h2>
+
+      <div class="form-grid">
+        <label>Customer <select id="csCustomer"></select></label>
+      </div>
+
+      <div class="profile-box" id="csProfile">
+        <div><span>Name</span><strong id="csName">—</strong></div>
+        <div><span>Telephone</span><strong id="csPhone">—</strong></div>
+        <div><span>Address</span><strong id="csAddress">—</strong></div>
+        <div><span>Delivery Method</span><strong id="csDelivery">—</strong></div>
+        <div><span>Marketing Opt-In</span><strong id="csOptIn">—</strong></div>
+        <div><span>Notes</span><strong id="csNotes">—</strong></div>
+      </div>
+
+      <h3>Orders &amp; Balance</h3>
+      <table class="data-table" id="csOrdersTable">
+        <thead><tr><th>Order ID</th><th>Status</th><th>Subtotal</th><th>Paid</th><th>Balance Due</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h3>Record a Payment</h3>
+      <div class="form-grid">
+        <label>Amount (£) <input type="number" id="csPayAmount" step="0.01" min="0"></label>
+        <label>Type
+          <select id="csPayType"><option>Deposit</option><option>Balance</option><option>Refund</option><option>Other</option></select>
+        </label>
+        <button id="csPayBtn" class="btn btn-primary">💰 Record Payment</button>
+      </div>
+      <div id="csMsg" class="msg-box"></div>
+    </section>
+
+    <!-- ======================= INVOICE ======================= -->
+    <section id="tab-invoice" class="tab-panel">
+      <h2 class="no-print">Invoice</h2>
+      <div class="form-grid no-print">
+        <label>Order <select id="invOrder"></select></label>
+        <button id="invGenerateBtn" class="btn btn-primary">🧾 Generate</button>
+        <button id="invPrintBtn" class="btn btn-secondary">🖨 Print / Save as PDF</button>
+      </div>
+
+      <div id="invoiceDoc" class="invoice-doc hidden">
+        <div class="invoice-header">
+          <h1>F. Conisbee &amp; Son</h1>
+          <p id="invCompanyLine">Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ · 01483 282073</p>
+        </div>
+        <div class="invoice-meta">
+          <div><strong>Invoice</strong><span id="invNumber">—</span></div>
+          <div><strong>Date</strong><span id="invDate">—</span></div>
+          <div><strong>Order</strong><span id="invOrderId">—</span></div>
+        </div>
+        <div class="invoice-billto">
+          <strong>Bill To</strong>
+          <div id="invBillName">—</div>
+          <div id="invBillPhone">—</div>
+          <div id="invBillDelivery">—</div>
+        </div>
+        <table class="data-table invoice-items">
+          <thead><tr><th>#</th><th>Product</th><th>Weight (KG)</th><th>Price/KG</th><th>Total</th></tr></thead>
+          <tbody id="invItemsBody"></tbody>
+        </table>
+        <div class="totals-box">
+          <div><span>Subtotal</span><strong id="invSubtotal">£0.00</strong></div>
+          <div><span>Amount Paid</span><strong id="invPaid">£0.00</strong></div>
+          <div class="balance"><span>Balance Due</span><strong id="invBalance">£0.00</strong></div>
+        </div>
+      </div>
+      <div id="invMsg" class="msg-box no-print"></div>
+    </section>
+
+    <!-- ======================= MARKETING ======================= -->
+    <section id="tab-marketing" class="tab-panel">
+      <h2>Marketing Segmentation</h2>
+      <div class="form-grid">
+        <label>Delivery Method
+          <select id="mktDelivery"><option>Any</option><option>Collection</option><option>Delivery</option><option>Unknown</option></select>
+        </label>
+        <label>Marketing Opt-In
+          <select id="mktOptIn"><option>Any</option><option>Y</option><option>N</option></select>
+        </label>
+        <button id="mktGenerateBtn" class="btn btn-primary">⚙ Generate List</button>
+        <button id="mktExportBtn" class="btn btn-secondary">📤 Export CSV</button>
+      </div>
+      <table class="data-table" id="mktTable">
+        <thead><tr><th>Customer ID</th><th>Name</th><th>Telephone</th><th>Delivery</th><th>Order Total</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- ======================= TURKEY PLANNING ======================= -->
+    <section id="tab-turkeyPlanning" class="tab-panel">
+      <h2>Turkey Allocation Planning</h2>
+      <p class="warning-text" style="background:#EAF1FB;border-color:#1F4E78;">
+        Buckets every Whole Turkey and Crown/Misc order line by weight band, so you know how many
+        birds of each size to source. "Allocated" means a Turkey Number has been filled in on that
+        order line (Order Entry's Turkey detail fields) — i.e. a real bird has been matched to it.
+      </p>
+
+      <h3>Whole Turkeys</h3>
+      <table class="data-table" id="turkeyWholeTable">
+        <thead><tr><th>Weight Range (KG)</th><th>Ordered</th><th>Allocated</th><th>Left to Allocate</th></tr></thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+      <div class="chart-wrap"><canvas id="turkeyWholeChart" height="80"></canvas></div>
+
+      <h3>Crowns &amp; Misc (Turkey Misc)</h3>
+      <table class="data-table" id="turkeyMiscTable">
+        <thead><tr><th>Weight Range (KG)</th><th>Ordered</th></tr></thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+      <div class="chart-wrap"><canvas id="turkeyMiscChart" height="80"></canvas></div>
+    </section>
+
+    <!-- ======================= UNASSIGNED ======================= -->
+    <section id="tab-unassigned" class="tab-panel">
+      <h2>⚠ Unassigned Transactions</h2>
+      <p class="warning-text">Real money found with no customer name attached — resolve these when you can.</p>
+
+      <table class="data-table" id="unassignedTable">
+        <thead><tr><th>Source</th><th>Item #</th><th>Product</th><th>Weight (KG)</th><th>£/KG</th><th>Total</th><th>Issue</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="totals-box"><div class="balance"><span>Total Unassigned</span><strong id="unassignedTotal">£0.00</strong></div></div>
+
+      <h3>Resolve to Customer</h3>
+      <div class="form-grid">
+        <label>Item # to resolve <select id="resItemNo"></select></label>
+        <label>Existing Customer <select id="resCustomer"><option value="">— none —</option></select></label>
+      </div>
+      <div class="form-grid">
+        <label>...OR New Customer Name <input type="text" id="resNewName"></label>
+        <label>New Customer Phone <input type="text" id="resNewPhone"></label>
+      </div>
+      <div class="button-row">
+        <button id="resResolveBtn" class="btn btn-primary">✅ Resolve to Customer</button>
+        <button id="resRefreshBtn" class="btn btn-ghost">🔄 Refresh List</button>
+      </div>
+      <div id="resMsg" class="msg-box"></div>
+    </section>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch((err) => {
+        console.warn("Service worker registration failed:", err);
+      });
+    });
+  }
+</script>
+</body>
+</html>
