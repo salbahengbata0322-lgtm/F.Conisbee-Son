@@ -41,6 +41,7 @@
     <nav class="tabs">
       <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
       <button class="tab-btn" data-tab="checkout">Checkout</button>
+      <button class="tab-btn" data-tab="salesHistory">Sales History</button>
       <button class="tab-btn" data-tab="orderEntry">Order Entry</button>
       <button class="tab-btn" data-tab="customerSearch">Customer Search</button>
       <button class="tab-btn" data-tab="invoice">Invoice</button>
@@ -159,6 +160,53 @@
         <p class="no-print" style="margin-top:16px;">
           <button id="rcptPrintBtn" class="btn btn-secondary">🖨 Print Receipt</button>
           <button id="rcptNewSaleBtn" class="btn btn-primary">🛒 New Sale</button>
+        </p>
+      </div>
+    </section>
+
+    <!-- ======================= SALES HISTORY ======================= -->
+    <section id="tab-salesHistory" class="tab-panel">
+      <h2 class="no-print">Sales History</h2>
+
+      <div class="form-grid no-print">
+        <label>From <input type="date" id="shFromDate"></label>
+        <label>To <input type="date" id="shToDate"></label>
+        <button id="shFilterBtn" class="btn btn-primary">🔍 Filter</button>
+        <button id="shResetBtn" class="btn btn-ghost">✖ Reset</button>
+      </div>
+
+      <table class="data-table no-print" id="shTable">
+        <thead><tr><th>Date/Time</th><th>Sale ID</th><th>Payment</th><th>Total</th></tr></thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
+      <p class="no-print" id="shHint" style="font-size:12px;color:#888;">Click a row to view and reprint its receipt.</p>
+
+      <div id="shReceiptDoc" class="invoice-doc hidden">
+        <div class="invoice-header receipt-header-row">
+          <div>
+            <h1>F. Conisbee &amp; Son</h1>
+            <p>Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ · 01483 282073</p>
+          </div>
+          <img src="icons/logo-full.png" alt="F. Conisbee & Son — Est. 1760" class="receipt-logo">
+        </div>
+        <div class="invoice-meta">
+          <div><strong>Receipt</strong><span id="shRcptNumber">—</span></div>
+          <div><strong>Date/Time</strong><span id="shRcptDate">—</span></div>
+          <div><strong>Payment</strong><span id="shRcptPayment">—</span></div>
+        </div>
+        <table class="data-table invoice-items">
+          <thead><tr><th>Product</th><th>Weight/Qty</th><th>Price</th><th>Total</th></tr></thead>
+          <tbody id="shRcptItemsBody"></tbody>
+        </table>
+        <div class="totals-box">
+          <div class="balance"><span>TOTAL</span><strong id="shRcptTotal">£0.00</strong></div>
+          <div id="shRcptCashRow"><span>Tendered</span><strong id="shRcptTendered">£0.00</strong></div>
+          <div id="shRcptChangeRow"><span>Change</span><strong id="shRcptChange">£0.00</strong></div>
+        </div>
+        <p class="no-print" style="margin-top:16px;">
+          <button id="shRcptPrintBtn" class="btn btn-secondary">🖨 Print Receipt</button>
+          <button id="shRcptCloseBtn" class="btn btn-ghost">✖ Close</button>
         </p>
       </div>
     </section>

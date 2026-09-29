@@ -41,6 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireMarketing();
   wireUnassigned();
   wireCheckout();
+  wireSalesHistory();
 
   // Resume session if already logged in (e.g. page refresh)
   sb.auth.getSession().then(({ data }) => {
@@ -105,6 +106,7 @@ function wireTabs() {
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
       if (btn.dataset.tab === "turkeyPlanning") renderTurkeyPlanning();
       if (btn.dataset.tab === "dashboard") renderTillSalesSummary();
+      if (btn.dataset.tab === "salesHistory") loadAndRenderSalesHistory();
     });
   });
 }
@@ -952,7 +954,11 @@ async function completeSale() {
   const { error: itemsErr } = await sb.from("sale_items").insert(rows);
   if (itemsErr) { showMsg("coMsg", itemsErr.message, "error"); return; }
 
-  renderReceipt(saleId, paymentMethod, tendered, change, total);
+  const items = cart.map((item) => ({
+    product_name: item.product, mode: item.mode, weight_kg: item.weight, quantity: item.qty, price: item.price,
+  }));
+  renderReceiptInto("rcpt", saleId, paymentMethod, tendered, change, total, items);
+  document.getElementById("receiptDoc").classList.remove("hidden");
   cart = [];
   renderCart();
   document.getElementById("coTendered").value = "";
@@ -961,24 +967,26 @@ async function completeSale() {
   renderTillSalesSummary();
 }
 
-function renderReceipt(saleId, paymentMethod, tendered, change, total) {
-  document.getElementById("rcptNumber").textContent = saleId;
-  document.getElementById("rcptDate").textContent = new Date().toLocaleString("en-GB");
-  document.getElementById("rcptPayment").textContent = paymentMethod;
-  document.getElementById("rcptItemsBody").innerHTML = cart.map((item) => {
-    const qtyDisplay = item.mode === "Weight" ? `${item.weight} kg` : `x${item.qty}`;
-    const lineTotal = (item.mode === "Weight" ? item.weight : item.qty) * item.price;
-    return `<tr><td>${item.product}</td><td>${qtyDisplay}</td><td>${money(item.price)}</td><td>${money(lineTotal)}</td></tr>`;
+// Shared receipt renderer — prefix selects which set of element ids to fill
+// ("rcpt" for the live checkout receipt, "shRcpt" for viewing a past sale in
+// Sales History). items are DB-shaped: {product_name, mode, weight_kg, quantity, price}.
+function renderReceiptInto(prefix, saleId, paymentMethod, tendered, change, total, items) {
+  document.getElementById(prefix + "Number").textContent = saleId;
+  document.getElementById(prefix + "Date").textContent = new Date().toLocaleString("en-GB");
+  document.getElementById(prefix + "Payment").textContent = paymentMethod;
+  document.getElementById(prefix + "ItemsBody").innerHTML = items.map((item) => {
+    const qtyDisplay = item.mode === "Weight" ? `${item.weight_kg} kg` : `x${item.quantity}`;
+    const lineTotal = (item.mode === "Weight" ? item.weight_kg : item.quantity) * item.price;
+    return `<tr><td>${item.product_name}</td><td>${qtyDisplay}</td><td>${money(item.price)}</td><td>${money(lineTotal)}</td></tr>`;
   }).join("");
-  document.getElementById("rcptTotal").textContent = money(total);
+  document.getElementById(prefix + "Total").textContent = money(total);
   const isCash = paymentMethod === "Cash";
-  document.getElementById("rcptCashRow").classList.toggle("hidden", !isCash);
-  document.getElementById("rcptChangeRow").classList.toggle("hidden", !isCash);
+  document.getElementById(prefix + "CashRow").classList.toggle("hidden", !isCash);
+  document.getElementById(prefix + "ChangeRow").classList.toggle("hidden", !isCash);
   if (isCash) {
-    document.getElementById("rcptTendered").textContent = money(tendered);
-    document.getElementById("rcptChange").textContent = money(change);
+    document.getElementById(prefix + "Tendered").textContent = money(tendered);
+    document.getElementById(prefix + "Change").textContent = money(change);
   }
-  document.getElementById("receiptDoc").classList.remove("hidden");
 }
 
 function startNewSale() {
@@ -1090,4 +1098,73 @@ async function renderTurkeyPlanning() {
 
   turkeyWholeChartInstance = renderBandChart("turkeyWholeChart", wholeBuckets, turkeyWholeChartInstance);
   turkeyMiscChartInstance = renderBandChart("turkeyMiscChart", miscBuckets, turkeyMiscChartInstance);
+}
+
+// ---------------------------------------------------------------------------
+// SALES HISTORY
+// ---------------------------------------------------------------------------
+let allSalesCache = [];
+
+function wireSalesHistory() {
+  document.getElementById("shFilterBtn").addEventListener("click", applySalesHistoryFilter);
+  document.getElementById("shResetBtn").addEventListener("click", () => {
+    document.getElementById("shFromDate").value = "";
+    document.getElementById("shToDate").value = "";
+    renderSalesHistoryTable(allSalesCache);
+  });
+  document.getElementById("shRcptPrintBtn").addEventListener("click", () => window.print());
+  document.getElementById("shRcptCloseBtn").addEventListener("click", () => {
+    document.getElementById("shReceiptDoc").classList.add("hidden");
+  });
+}
+
+async function loadAndRenderSalesHistory() {
+  const { data, error } = await sb.from("sales").select("*").order("sale_date", { ascending: false });
+  if (error) { console.error(error); return; }
+  allSalesCache = (data || []).filter((s) => s.status !== "Voided");
+  renderSalesHistoryTable(allSalesCache);
+}
+
+function applySalesHistoryFilter() {
+  const from = document.getElementById("shFromDate").value;
+  const to = document.getElementById("shToDate").value;
+  let filtered = allSalesCache;
+  if (from) filtered = filtered.filter((s) => s.sale_date >= from);
+  if (to) {
+    const toEnd = to + "T23:59:59";
+    filtered = filtered.filter((s) => s.sale_date <= toEnd);
+  }
+  renderSalesHistoryTable(filtered);
+}
+
+function renderSalesHistoryTable(sales) {
+  const tbody = document.querySelector("#shTable tbody");
+  tbody.innerHTML = sales.map((s) => `
+    <tr class="sh-row" data-sale-id="${s.id}" style="cursor:pointer;">
+      <td>${new Date(s.sale_date).toLocaleString("en-GB")}</td>
+      <td>${s.id}</td>
+      <td>${s.payment_method}</td>
+      <td>${money(s.subtotal)}</td>
+    </tr>
+  `).join("");
+
+  const total = sales.reduce((sum, s) => sum + Number(s.subtotal || 0), 0);
+  document.querySelector("#shTable tfoot").innerHTML =
+    `<tr><td>TOTAL</td><td></td><td>${sales.length} sale(s)</td><td>${money(total)}</td></tr>`;
+
+  tbody.querySelectorAll(".sh-row").forEach((tr) => {
+    tr.addEventListener("click", () => viewHistoricSale(tr.dataset.saleId));
+  });
+}
+
+async function viewHistoricSale(saleId) {
+  const sale = allSalesCache.find((s) => s.id === saleId);
+  if (!sale) return;
+  const { data: items, error } = await sb.from("sale_items").select("*").eq("sale_id", saleId).order("line_no");
+  if (error) { console.error(error); return; }
+
+  renderReceiptInto("shRcpt", saleId, sale.payment_method, sale.amount_tendered, sale.change_given, sale.subtotal, items || []);
+  document.getElementById("shRcptDate").textContent = new Date(sale.sale_date).toLocaleString("en-GB");
+  document.getElementById("shReceiptDoc").classList.remove("hidden");
+  document.getElementById("shReceiptDoc").scrollIntoView({ behavior: "smooth", block: "start" });
 }
