@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="style.css?v=2">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -439,13 +440,18 @@
     <section id="tab-backup" class="tab-panel">
       <h2>Backup</h2>
       <p class="warning-text" style="background:#EAF1FB;border-color:#1F4E78;">
-        Supabase's free tier doesn't include automated backups. Click the button below every so
-        often (once a week is a reasonable habit) and save the downloaded file somewhere safe — a
-        cloud drive folder, or emailed to yourself. It's a complete snapshot of every customer,
-        order, payment, sale, and product — everything needed to rebuild the database from scratch
-        if anything ever goes wrong.
+        Supabase's free tier doesn't include automated backups. Click one of the buttons below
+        every so often (once a week is a reasonable habit) and save the downloaded file somewhere
+        safe — a cloud drive folder, or emailed to yourself. Either one is a complete snapshot of
+        every customer, order, payment, sale, and product.
       </p>
-      <button id="backupBtn" class="btn btn-primary">💾 Download Full Backup</button>
+      <p style="font-size:12px;color:#888;margin-top:-6px;">
+        <strong>Excel</strong> — for actually looking at the data (opens straight into a normal
+        spreadsheet, one tab per table). <strong>JSON</strong> — the more exact, restore-from-scratch
+        version, meant to be re-imported rather than read directly.
+      </p>
+      <button id="backupBtn" class="btn btn-primary">💾 Download Full Backup (JSON)</button>
+      <button id="backupExcelBtn" class="btn btn-secondary">📊 Download as Excel (.xlsx)</button>
       <div id="backupMsg" class="msg-box"></div>
     </section>
 
@@ -482,6 +488,23 @@
     </section>
 
   </main>
+
+  <!-- ============ HELP PANEL ============ -->
+  <button id="helpBtn" class="help-fab no-print" title="Help">🤖</button>
+  <div id="helpPanel" class="help-panel hidden no-print">
+    <div class="help-panel-header">
+      <strong>Help</strong>
+      <button id="helpCloseBtn" class="help-close">✖</button>
+    </div>
+    <div class="help-panel-body">
+      <input type="text" id="helpSearchInput" placeholder="Ask a question… e.g. how do I record a deposit">
+      <div id="helpAnswer" class="help-answer hidden"></div>
+      <div class="help-topics">
+        <div class="help-topics-label">Or browse by topic</div>
+        <div id="helpTopicList"></div>
+      </div>
+    </div>
+  </div>
 
   <footer class="app-footer no-print">
     F. Conisbee &amp; Son &nbsp;·&nbsp; Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ

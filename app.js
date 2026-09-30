@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireSalesHistory();
   wireBackup();
   wireSecurity();
+  wireHelp();
 
   // Resume session if already logged in (e.g. page refresh)
   sb.auth.getSession().then(({ data }) => {
@@ -1340,23 +1341,29 @@ const BACKUP_TABLES = [
 
 function wireBackup() {
   document.getElementById("backupBtn").addEventListener("click", downloadFullBackup);
+  document.getElementById("backupExcelBtn").addEventListener("click", downloadExcelBackup);
 }
 
-async function downloadFullBackup() {
-  showMsg("backupMsg", "Fetching all data…", "");
-  const backup = { exported_at: new Date().toISOString() };
+async function fetchAllBackupTables() {
+  const result = {};
   let hadError = false;
-
   for (const table of BACKUP_TABLES) {
     const { data, error } = await sb.from(table).select("*");
     if (error) {
       console.error(table, error);
       hadError = true;
-      backup[table] = { error: error.message };
+      result[table] = [];
     } else {
-      backup[table] = data || [];
+      result[table] = data || [];
     }
   }
+  return { result, hadError };
+}
+
+async function downloadFullBackup() {
+  showMsg("backupMsg", "Fetching all data…", "");
+  const { result, hadError } = await fetchAllBackupTables();
+  const backup = { exported_at: new Date().toISOString(), ...result };
 
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -1371,6 +1378,31 @@ async function downloadFullBackup() {
   } else {
     const counts = BACKUP_TABLES.map((t) => `${t}: ${backup[t].length}`).join(", ");
     showMsg("backupMsg", `Backup downloaded. Rows included — ${counts}.`, "success");
+  }
+}
+
+async function downloadExcelBackup() {
+  if (!window.XLSX) {
+    showMsg("backupMsg", "Excel export library didn't load — check your internet connection and try again.", "error");
+    return;
+  }
+  showMsg("backupMsg", "Fetching all data…", "");
+  const { result, hadError } = await fetchAllBackupTables();
+
+  const workbook = XLSX.utils.book_new();
+  BACKUP_TABLES.forEach((table) => {
+    const rows = result[table];
+    const sheet = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{}]);
+    XLSX.utils.book_append_sheet(workbook, sheet, table.slice(0, 31));
+  });
+
+  XLSX.writeFile(workbook, `ConisbeeBackup_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+  if (hadError) {
+    showMsg("backupMsg", "Excel file downloaded, but one or more tables had an error — check the browser console.", "error");
+  } else {
+    const counts = BACKUP_TABLES.map((t) => `${t}: ${result[t].length}`).join(", ");
+    showMsg("backupMsg", `Excel file downloaded. Rows included — ${counts}.`, "success");
   }
 }
 
@@ -1453,4 +1485,133 @@ async function removeMfa() {
 
   showMsg("mfaMsg", "2FA removed from your account.", "success");
   renderMfaStatus();
+}
+
+// ---------------------------------------------------------------------------
+// HELP PANEL — a simple in-site assistant: browse by topic, or type a
+// question and get keyword-matched to the closest topic. Not real AI — just
+// scoring keyword overlap against the same content as the Staff User Guide.
+// Zero cost, zero new backend, since it only ever reads this hardcoded list.
+// ---------------------------------------------------------------------------
+const HELP_TOPICS = [
+  {
+    id: "login", title: "Logging In",
+    keywords: ["log in", "login", "sign in", "password", "locked out"],
+    body: "Enter your email and password, then click Log In. There's no \"forgot password\" link — if you're locked out, ask whoever set up the system to reset it for you.",
+  },
+  {
+    id: "checkout", title: "Checkout — Counter Sales",
+    keywords: ["checkout", "till", "counter sale", "ring up", "cash", "card", "change due", "receipt"],
+    body: "Choose the product, then By Weight or By Quantity. Price fills in automatically for fixed-price items. Click + Add to Cart, repeat for each item, choose Cash or Card, then Complete Sale. A printable receipt appears afterwards.",
+  },
+  {
+    id: "orderEntry", title: "Order Entry — Pre-Orders",
+    keywords: ["order entry", "pre-order", "christmas order", "new order", "turkey number", "delivery method", "collection date"],
+    body: "Choose the customer (or create a new one), set delivery method/status/dates, add each item with its weight or quantity, then Save Order. You can save just to update delivery/status without adding new items.",
+  },
+  {
+    id: "customerSearch", title: "Customer Search & Payments",
+    keywords: ["customer search", "find customer", "record payment", "deposit", "balance", "refund"],
+    body: "Pick the customer to see their profile and balance. To record a deposit or payment: enter the amount, choose the type, click Record Payment. Fully settling the balance automatically marks the order Ready.",
+  },
+  {
+    id: "invoice", title: "Invoice",
+    keywords: ["invoice", "print invoice", "pdf"],
+    body: "Choose the order, click Generate, then Print / Save as PDF.",
+  },
+  {
+    id: "dashboard", title: "Dashboard",
+    keywords: ["dashboard", "overview", "total order value", "kpi", "till sales"],
+    body: "The overview page — total order value, deposits, balance outstanding, unassigned total, the full order list, and breakdowns by Status and Payment, plus Till Sales for Today/Week/Month/Year.",
+  },
+  {
+    id: "salesHistory", title: "Sales History",
+    keywords: ["sales history", "past sales", "old receipt", "reprint", "export csv sales"],
+    body: "Every past counter sale, newest first. Filter by date, click a row to view/reprint its receipt, or Export CSV to download the list.",
+  },
+  {
+    id: "marketing", title: "Marketing",
+    keywords: ["marketing", "mailing list", "customer list", "opt-in"],
+    body: "Filter by delivery method and/or opt-in, click Generate List, then Export CSV.",
+  },
+  {
+    id: "turkeyPlanning", title: "Turkey Planning",
+    keywords: ["turkey planning", "turkey allocation", "how many turkeys", "weight band", "allocated"],
+    body: "Shows whole-turkey and crown/misc orders grouped into weight bands, so you know how many birds of each size to source. \"Allocated\" means a Turkey Number has been entered against that order.",
+  },
+  {
+    id: "unassigned", title: "Unassigned",
+    keywords: ["unassigned", "no customer name", "resolve", "orphaned transaction"],
+    body: "Old transactions with no customer name attached. Match one to an existing customer, or create a new one, using the panel at the bottom of the page.",
+  },
+  {
+    id: "backup", title: "Backup",
+    keywords: ["backup", "export data", "download data", "excel export", "csv export data"],
+    body: "Download a full snapshot of every table — as JSON (exact, for restoring) or as Excel (.xlsx, one tab per table, for actually reading the data).",
+  },
+  {
+    id: "security", title: "Security (2FA)",
+    keywords: ["security", "2fa", "two factor", "authenticator", "mfa"],
+    body: "Set up a 6-digit authenticator app code as a second login step, for your own account. If you lose access to your authenticator, someone with Supabase dashboard access will need to manually remove it to let you back in.",
+  },
+];
+
+function helpBestMatch(query) {
+  const q = query.toLowerCase().trim();
+  if (!q) return null;
+  let best = null, bestScore = 0;
+  HELP_TOPICS.forEach((topic) => {
+    let score = 0;
+    topic.keywords.forEach((kw) => { if (q.includes(kw) || kw.includes(q)) score += kw.length; });
+    if (score > bestScore) { bestScore = score; best = topic; }
+  });
+  return best;
+}
+
+function helpCurrentTabTopic() {
+  const activeBtn = document.querySelector(".tab-btn.active");
+  if (!activeBtn) return HELP_TOPICS[0];
+  return HELP_TOPICS.find((t) => t.id === activeBtn.dataset.tab) || HELP_TOPICS[0];
+}
+
+function helpShowTopic(topic) {
+  const el = document.getElementById("helpAnswer");
+  el.innerHTML = `<strong>${topic.title}</strong>${topic.body}`;
+  el.classList.remove("hidden");
+}
+
+function helpRenderTopicList() {
+  const el = document.getElementById("helpTopicList");
+  el.innerHTML = HELP_TOPICS.map((t) => `<button class="help-topic-btn" data-topic="${t.id}">${t.title}</button>`).join("");
+  el.querySelectorAll(".help-topic-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const topic = HELP_TOPICS.find((t) => t.id === btn.dataset.topic);
+      helpShowTopic(topic);
+    });
+  });
+}
+
+function wireHelp() {
+  const fab = document.getElementById("helpBtn");
+  const panel = document.getElementById("helpPanel");
+  const searchInput = document.getElementById("helpSearchInput");
+
+  helpRenderTopicList();
+
+  fab.addEventListener("click", () => {
+    const opening = panel.classList.contains("hidden");
+    panel.classList.toggle("hidden");
+    if (opening) {
+      helpShowTopic(helpCurrentTabTopic());
+      searchInput.value = "";
+      searchInput.focus();
+    }
+  });
+
+  document.getElementById("helpCloseBtn").addEventListener("click", () => panel.classList.add("hidden"));
+
+  searchInput.addEventListener("input", () => {
+    const match = helpBestMatch(searchInput.value);
+    if (match) helpShowTopic(match);
+  });
 }
