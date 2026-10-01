@@ -489,14 +489,24 @@ async function onOeCustomerChange() {
 async function createCustomerInline() {
   const name = document.getElementById("oeNewName").value.trim();
   const phone = document.getElementById("oeNewPhone").value.trim();
+  const email = document.getElementById("oeNewEmail").value.trim();
   if (!name || !phone) {
     showMsg("oeMsg", "Enter both a name and phone number for the new customer.", "error");
     return;
   }
+  // Email is optional, but if given it must look like an address (name@domain.tld).
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showMsg("oeMsg", "That email address doesn't look right. Check it, or leave it blank.", "error");
+    return;
+  }
   const newId = await nextSequentialId("customers", "C", 3);
-  const { error } = await sb.from("customers").insert({
+  const newCustomer = {
     id: newId, name, telephone: phone, delivery_method: "Unknown", marketing_opt_in: "Y",
-  });
+  };
+  // Only send the email when one was typed, so adding a customer without one
+  // keeps working even before the "email" column has been added to the database.
+  if (email) newCustomer.email = email;
+  const { error } = await sb.from("customers").insert(newCustomer);
   if (error) { showMsg("oeMsg", error.message, "error"); return; }
 
   await loadCustomers();
@@ -505,6 +515,7 @@ async function createCustomerInline() {
   document.getElementById("oeNewCustomerForm").classList.add("hidden");
   document.getElementById("oeNewName").value = "";
   document.getElementById("oeNewPhone").value = "";
+  document.getElementById("oeNewEmail").value = "";
   onOeCustomerChange();
   showMsg("oeMsg", `Customer ${newId} created.`, "success");
 }
