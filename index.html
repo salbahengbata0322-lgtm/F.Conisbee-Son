@@ -300,11 +300,18 @@
       <div class="profile-box" id="csProfile">
         <div><span>Name</span><strong id="csName">—</strong></div>
         <div><span>Telephone</span><strong id="csPhone">—</strong></div>
+        <div><span>Email</span><strong id="csEmail">—</strong></div>
         <div><span>Address</span><strong id="csAddress">—</strong></div>
         <div><span>Delivery Method (default preference)</span><strong id="csDelivery">—</strong></div>
         <div><span>Marketing Opt-In</span><strong id="csOptIn">—</strong></div>
         <div><span>Notes</span><strong id="csNotes">—</strong></div>
       </div>
+
+      <div class="form-grid">
+        <label>Add / update email <input type="email" id="csEmailInput" placeholder="name@example.com" autocomplete="off"></label>
+        <button id="csEmailSaveBtn" class="btn btn-secondary small">Save email</button>
+      </div>
+      <div id="csEmailMsg" class="msg-box"></div>
 
       <h3>Orders &amp; Balance</h3>
       <table class="data-table" id="csOrdersTable">
@@ -330,6 +337,7 @@
         <label>Order <select id="invOrder"></select></label>
         <button id="invGenerateBtn" class="btn btn-primary">🧾 Generate</button>
         <button id="invPrintBtn" class="btn btn-secondary">🖨 Print / Save as PDF</button>
+        <button id="invEmailBtn" class="btn btn-secondary">✉ Email Invoice</button>
       </div>
 
       <div id="invoiceDoc" class="invoice-doc hidden">
@@ -379,7 +387,7 @@
         <button id="mktExportBtn" class="btn btn-secondary">📤 Export CSV</button>
       </div>
       <table class="data-table" id="mktTable">
-        <thead><tr><th>Customer ID</th><th>Name</th><th>Telephone</th><th>Delivery</th><th>Order Total</th></tr></thead>
+        <thead><tr><th>Customer ID</th><th>Name</th><th>Telephone</th><th>Email</th><th>Delivery</th><th>Order Total</th></tr></thead>
         <tbody></tbody>
       </table>
     </section>
@@ -513,7 +521,7 @@
   </footer>
 </div>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {

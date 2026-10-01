@@ -261,6 +261,17 @@ function populateOrderDropdown() {
   el.innerHTML = `<option value="">— select —</option>` + opts;
 }
 
+// Escape text before putting user-typed values (like an email address) into innerHTML.
+function escHtml(v) {
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Simple "looks like an email" check (name@domain.tld). Empty is handled by the caller.
+function looksLikeEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
 function money(n) {
   const val = Number(n) || 0;
   // Round properly before formatting — plain toFixed(2) can round numbers that
@@ -495,7 +506,7 @@ async function createCustomerInline() {
     return;
   }
   // Email is optional, but if given it must look like an address (name@domain.tld).
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !looksLikeEmail(email)) {
     showMsg("oeMsg", "That email address doesn't look right. Check it, or leave it blank.", "error");
     return;
   }
@@ -725,18 +736,37 @@ function showMsg(elId, text, type) {
 function wireCustomerSearch() {
   document.getElementById("csCustomer").addEventListener("change", renderCustomerProfile);
   document.getElementById("csPayBtn").addEventListener("click", recordPayment);
+  document.getElementById("csEmailSaveBtn").addEventListener("click", saveCustomerEmail);
+}
+
+async function saveCustomerEmail() {
+  const custId = document.getElementById("csCustomer").value;
+  if (!custId) { showMsg("csEmailMsg", "Select a customer first.", "error"); return; }
+  const email = document.getElementById("csEmailInput").value.trim();
+  if (email && !looksLikeEmail(email)) {
+    showMsg("csEmailMsg", "That email address doesn't look right. Check it, or clear the box to remove it.", "error");
+    return;
+  }
+  const { error } = await sb.from("customers").update({ email: email || null }).eq("id", custId);
+  if (error) { showMsg("csEmailMsg", error.message, "error"); return; }
+  await loadCustomers();
+  renderCustomerProfile();
+  showMsg("csEmailMsg", email ? "Email saved." : "Email removed.", "success");
 }
 
 function renderCustomerProfile() {
   const custId = document.getElementById("csCustomer").value;
   const cust = CACHE.customers.find((c) => c.id === custId);
   if (!cust) {
-    ["csName", "csPhone", "csAddress", "csDelivery", "csOptIn", "csNotes"].forEach((id) => (document.getElementById(id).textContent = "—"));
+    ["csName", "csPhone", "csEmail", "csAddress", "csDelivery", "csOptIn", "csNotes"].forEach((id) => (document.getElementById(id).textContent = "—"));
+    document.getElementById("csEmailInput").value = "";
     document.querySelector("#csOrdersTable tbody").innerHTML = "";
     return;
   }
   document.getElementById("csName").textContent = cust.name || "—";
   document.getElementById("csPhone").textContent = cust.telephone || "—";
+  document.getElementById("csEmail").textContent = cust.email || "—";
+  document.getElementById("csEmailInput").value = cust.email || "";
   document.getElementById("csAddress").textContent = cust.address || "—";
   document.getElementById("csDelivery").textContent = cust.delivery_method || "—";
   document.getElementById("csOptIn").textContent = cust.marketing_opt_in || "—";
@@ -795,6 +825,44 @@ async function recordPayment() {
 function wireInvoice() {
   document.getElementById("invGenerateBtn").addEventListener("click", generateInvoice);
   document.getElementById("invPrintBtn").addEventListener("click", () => window.print());
+  document.getElementById("invEmailBtn").addEventListener("click", emailInvoice);
+}
+
+// Details of the invoice currently on screen, used by the Email Invoice button.
+let currentInvoice = null;
+
+// Opens the staff member's own email app with a ready-written message.
+// Nothing is sent from the website: staff check the message and press Send themselves.
+function emailInvoice() {
+  if (!currentInvoice) { showMsg("invMsg", "Click Generate first, then Email Invoice.", "error"); return; }
+  const inv = currentInvoice;
+  const to = inv.email && looksLikeEmail(inv.email) ? inv.email : "";
+
+  const sign = [
+    "Kind regards,",
+    "F. Conisbee & Son",
+    "Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ",
+    "Tel: 01483 282073",
+  ].join("\n");
+
+  const head = `Dear ${inv.name},\n\nPlease find your invoice ${inv.number} for order ${inv.orderId}, dated ${inv.date}.\n\n`;
+  const totals = `Subtotal: ${inv.subtotal}\nAmount paid: ${inv.paid}\nBalance due: ${inv.balance}\n\n${inv.delivery}\n\n`;
+  const itemsText = "Items:\n" + inv.lines.join("\n") + "\n\n";
+
+  const subject = `Your invoice ${inv.number} - F. Conisbee & Son`;
+  const build = (body) => `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  let url = build(head + itemsText + totals + sign);
+  // Very long orders can exceed what email apps accept in a link, so fall back to totals only.
+  if (url.length > 1800) {
+    url = build(head + totals + "(Full item list attached.)\n\n" + sign);
+  }
+  window.location.href = url;
+
+  showMsg("invMsg", to
+    ? "Your email app should open. To attach a PDF, use Print / Save as PDF first, then attach the file."
+    : "Your email app should open. This customer has no email on file, so type the address in, or save one on Customer Search.",
+    "success");
 }
 
 async function generateInvoice() {
@@ -823,6 +891,19 @@ async function generateInvoice() {
   document.getElementById("invPaid").textContent = money(order.amount_paid);
   document.getElementById("invBalance").textContent = money(order.balance_due);
 
+  currentInvoice = {
+    email: cust ? cust.email || "" : "",
+    name: cust ? cust.name : order.customer_id,
+    number: "INV-" + order.customer_id,
+    orderId,
+    date: new Date().toLocaleDateString("en-GB"),
+    delivery: "Delivery method: " + (order.delivery_method || "Unknown"),
+    subtotal: money(order.subtotal),
+    paid: money(order.amount_paid),
+    balance: money(order.balance_due),
+    lines: (lines || []).map((l) => `${l.line_no}. ${l.product_name}${lineDetailSuffix(l)} - ${l.weight_kg} kg x ${money(l.price_per_kg)} = ${money(l.line_total)}`),
+  };
+
   document.getElementById("invoiceDoc").classList.remove("hidden");
   showMsg("invMsg", "", "");
 }
@@ -850,14 +931,18 @@ function generateMarketingList() {
     });
 
   document.querySelector("#mktTable tbody").innerHTML = lastMarketingResults
-    .map((c) => `<tr><td>${c.id}</td><td>${c.name}</td><td>${c.telephone || ""}</td><td>${c.delivery_method || ""}</td><td>${money(c.order_total)}</td></tr>`)
+    .map((c) => `<tr><td>${c.id}</td><td>${c.name}</td><td>${c.telephone || ""}</td><td>${escHtml(c.email)}</td><td>${c.delivery_method || ""}</td><td>${money(c.order_total)}</td></tr>`)
     .join("");
 }
 
 function exportMarketingCsv() {
   if (lastMarketingResults.length === 0) { alert("Click 'Generate List' first."); return; }
-  const header = "CustomerID,Name,Telephone,Delivery,OrderTotal\n";
-  const rows = lastMarketingResults.map((c) => `${c.id},${c.name},${c.telephone || ""},${c.delivery_method || ""},${c.order_total}`).join("\n");
+  // Quote every field so a comma inside a name or address can't shift the columns.
+  const csvField = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const header = "CustomerID,Name,Telephone,Email,Delivery,MarketingOptIn,OrderTotal\n";
+  const rows = lastMarketingResults
+    .map((c) => [c.id, c.name, c.telephone, c.email, c.delivery_method, c.marketing_opt_in, c.order_total].map(csvField).join(","))
+    .join("\n");
   const blob = new Blob([header + rows], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1523,12 +1608,12 @@ const HELP_TOPICS = [
   {
     id: "customerSearch", title: "Customer Search & Payments",
     keywords: ["customer search", "find customer", "record payment", "deposit", "balance", "refund"],
-    body: "Pick the customer to see their profile and balance. To record a deposit or payment: enter the amount, choose the type, click Record Payment. Fully settling the balance automatically marks the order Ready.",
+    body: "Pick the customer to see their profile and balance. To add or change their email, type it in the email box and click Save email. To record a deposit or payment: enter the amount, choose the type, click Record Payment. Fully settling the balance automatically marks the order Ready.",
   },
   {
     id: "invoice", title: "Invoice",
     keywords: ["invoice", "print invoice", "pdf"],
-    body: "Choose the order, click Generate, then Print / Save as PDF.",
+    body: "Choose the order, click Generate, then Print / Save as PDF. To email it, click Email Invoice: your email app opens with the message ready, and you press Send. To attach a PDF, save it first and attach the file.",
   },
   {
     id: "dashboard", title: "Dashboard",
@@ -1543,7 +1628,7 @@ const HELP_TOPICS = [
   {
     id: "marketing", title: "Marketing",
     keywords: ["marketing", "mailing list", "customer list", "opt-in"],
-    body: "Filter by delivery method and/or opt-in, click Generate List, then Export CSV.",
+    body: "Filter by delivery method and/or opt-in, click Generate List, then Export CSV. The list includes each customer's email address. Only email customers whose opt-in is Y.",
   },
   {
     id: "turkeyPlanning", title: "Turkey Planning",
