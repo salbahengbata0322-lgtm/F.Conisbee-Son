@@ -273,7 +273,17 @@
         </div>
       </div>
 
-      <h3>Line Items</h3>
+      <div id="oeExistingSection" class="hidden">
+        <h3>Lines already saved on this order</h3>
+        <p style="margin:0 0 8px;">Change a weight, price or detail and click Save on that line, or Remove it. Add anything new in the section below.</p>
+        <table class="data-table" id="oeExistingTable">
+          <thead><tr><th>#</th><th>Product</th><th>Weight (KG)</th><th>Qty</th><th>Price/KG</th><th>Line Total</th><th>Details</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="oeExistingMsg" class="msg-box"></div>
+
+      <h3>New Line Items</h3>
       <table class="data-table" id="oeLinesTable">
         <thead><tr><th>Product</th><th>Weight (KG)</th><th>Qty</th><th>Price/KG</th><th>Line Total</th><th></th></tr></thead>
         <tbody></tbody>
@@ -290,6 +300,7 @@
         <button id="oeSaveBtn" class="btn btn-primary">💾 Save Order</button>
         <button id="oeInvoiceBtn" class="btn btn-secondary">🧾 Generate Invoice</button>
         <button id="oeClearBtn" class="btn btn-ghost">✖ Clear Form</button>
+        <button id="oeCancelOrderBtn" class="btn btn-ghost">🚫 Cancel Order</button>
       </div>
       <div id="oeMsg" class="msg-box"></div>
     </section>
@@ -312,11 +323,28 @@
         <div><span>Notes</span><strong id="csNotes">—</strong></div>
       </div>
 
-      <div class="form-grid">
-        <label>Add / update email <input type="email" id="csEmailInput" placeholder="name@example.com" autocomplete="off"></label>
-        <button id="csEmailSaveBtn" class="btn btn-secondary small">Save email</button>
-      </div>
-      <div id="csEmailMsg" class="msg-box"></div>
+      <details id="csEditBox" style="margin:10px 0 16px;">
+        <summary style="cursor:pointer;font-weight:600;">✎ Edit customer details</summary>
+        <div class="form-grid" style="margin-top:10px;">
+          <label>Name <input type="text" id="csEditName"></label>
+          <label>Telephone <input type="text" id="csEditPhone"></label>
+          <label>Email <input type="email" id="csEditEmail" placeholder="name@example.com" autocomplete="off"></label>
+        </div>
+        <div class="form-grid">
+          <label>Address <input type="text" id="csEditAddress"></label>
+          <label>Delivery preference
+            <select id="csEditDelivery"><option>Unknown</option><option>Collection</option><option>Delivery</option></select>
+          </label>
+          <label>Agreed to marketing offers
+            <select id="csEditOptIn"><option value="Y">Yes</option><option value="N">No</option></select>
+          </label>
+        </div>
+        <div class="form-grid">
+          <label>Notes <input type="text" id="csEditNotes"></label>
+          <button id="csEditSaveBtn" class="btn btn-primary small">💾 Save details</button>
+        </div>
+        <div id="csEditMsg" class="msg-box"></div>
+      </details>
 
       <h3>Orders &amp; Balance</h3>
       <table class="data-table" id="csOrdersTable">
@@ -553,7 +581,7 @@
   </footer>
 </div>
 
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {

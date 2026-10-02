@@ -336,9 +336,12 @@ async function nextSequentialId(table, prefix, digits) {
 // DASHBOARD
 // ---------------------------------------------------------------------------
 function renderDashboard() {
-  const totalOrderValue = CACHE.orders.reduce((s, o) => s + o.subtotal, 0);
+  // Cancelled orders stay on record but don't count as order value or money still owed.
+  // Deposits received still counts everything actually paid in.
+  const activeOrders = CACHE.orders.filter((o) => o.status !== "Cancelled");
+  const totalOrderValue = activeOrders.reduce((s, o) => s + o.subtotal, 0);
   const totalPaid = CACHE.orders.reduce((s, o) => s + o.amount_paid, 0);
-  const totalBalance = CACHE.orders.reduce((s, o) => s + o.balance_due, 0);
+  const totalBalance = activeOrders.reduce((s, o) => s + o.balance_due, 0);
   const totalUnassigned = CACHE.unassigned.reduce((s, u) => s + Number(u.total || 0), 0);
 
   document.getElementById("kpiTotalOrderValue").textContent = money(totalOrderValue);
@@ -477,6 +480,22 @@ function wireOrderEntry() {
     document.getElementById("oeNewCustomerForm").classList.toggle("hidden");
   });
   document.getElementById("oeCreateCustomerBtn").addEventListener("click", createCustomerInline);
+  document.getElementById("oeCancelOrderBtn").addEventListener("click", cancelOrder);
+
+  // Lines already saved on the order: Save / Remove buttons, and a live line total as you type
+  const exBody = document.querySelector("#oeExistingTable tbody");
+  exBody.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-id]");
+    if (!tr) return;
+    if (e.target.classList.contains("oe-ex-save")) saveExistingLine(tr);
+    if (e.target.classList.contains("oe-ex-remove")) removeExistingLine(tr);
+  });
+  exBody.addEventListener("input", (e) => {
+    const tr = e.target.closest("tr[data-id]");
+    if (!tr || !(e.target.classList.contains("oe-ex-weight") || e.target.classList.contains("oe-ex-price"))) return;
+    const total = (Number(tr.querySelector(".oe-ex-weight").value) || 0) * (Number(tr.querySelector(".oe-ex-price").value) || 0);
+    tr.querySelector(".oe-ex-total").textContent = money(total);
+  });
   // Note: the first empty line row is added once product data has loaded — see refreshAllData().
 }
 
@@ -493,11 +512,150 @@ async function onOeCustomerChange() {
   if (existing) {
     document.getElementById("oeDelivery").value = existing.delivery_method || "Unknown";
     document.getElementById("oeStatus").value = existing.status || "Pending";
+    // Show the saved dates too, so saving the order doesn't blank them out
+    document.getElementById("oeCollectionDate").value = existing.collection_date || "";
+    document.getElementById("oeDeliveryDate").value = existing.delivery_date || "";
     showMsg("oeMsg", "An order already exists for this customer — new lines will be added to it.", "success");
+    renderExistingLines(orderId);
   } else {
+    document.getElementById("oeDelivery").value = "Unknown";
+    document.getElementById("oeStatus").value = "Pending";
+    document.getElementById("oeCollectionDate").value = "";
+    document.getElementById("oeDeliveryDate").value = "";
     showMsg("oeMsg", "", "");
+    hideExistingLines();
   }
   recalcOeTotals();
+}
+
+// ---------------------------------------------------------------------------
+// Editing lines that are already saved on an order
+// ---------------------------------------------------------------------------
+let oeExistingLines = [];
+
+function hideExistingLines() {
+  oeExistingLines = [];
+  document.querySelector("#oeExistingTable tbody").innerHTML = "";
+  document.getElementById("oeExistingSection").classList.add("hidden");
+  showMsg("oeExistingMsg", "", "");
+}
+
+async function renderExistingLines(orderId) {
+  const { data, error } = await sb.from("order_details").select("*").eq("order_id", orderId).order("line_no");
+  if (error) { showMsg("oeExistingMsg", error.message, "error"); return; }
+  // If the customer was changed while this was loading, drop the late answer
+  if (document.getElementById("oeOrderId").value !== orderId) return;
+
+  oeExistingLines = data || [];
+  if (oeExistingLines.length === 0) { hideExistingLines(); return; }
+
+  const sel = (a, b) => (a === b ? "selected" : "");
+  document.querySelector("#oeExistingTable tbody").innerHTML = oeExistingLines.map((l) => {
+    let details = "";
+    if (l.product_name === "TURKEY WHOLE") {
+      details = `
+        <select class="oe-ex-ttype"><option value="">Type</option><option ${sel(l.turkey_type, "White")}>White</option><option ${sel(l.turkey_type, "Bronze")}>Bronze</option></select>
+        <select class="oe-ex-wmode"><option value="">Mode</option><option ${sel(l.weight_mode, "NYD")}>NYD</option><option ${sel(l.weight_mode, "EV")}>EV</option></select>
+        <input type="number" class="oe-ex-range" step="0.1" min="0" placeholder="± kg" value="${l.weight_range_kg ?? ""}" style="width:70px">
+        <input type="text" class="oe-ex-tnum" placeholder="Turkey #" value="${escHtml(l.turkey_number)}" style="width:90px">`;
+    } else if (l.category === "Turkey Breast Roll") {
+      details = `<select class="oe-ex-stuff"><option value="">Stuffing</option><option ${sel(l.stuffing_type, "Sage and Onion")}>Sage and Onion</option><option ${sel(l.stuffing_type, "Other")}>Other</option></select>`;
+    }
+    return `<tr data-id="${l.id}">
+      <td>${l.line_no}</td>
+      <td>${escHtml(l.product_name)}</td>
+      <td><input type="number" class="oe-ex-weight" step="0.001" min="0" value="${l.weight_kg}" style="width:90px"></td>
+      <td><input type="number" class="oe-ex-qty" step="1" min="0" value="${l.quantity ?? ""}" style="width:70px"></td>
+      <td><input type="number" class="oe-ex-price" step="0.01" min="0" value="${l.price_per_kg}" style="width:80px"></td>
+      <td class="oe-ex-total">${money(l.line_total)}</td>
+      <td>${details}</td>
+      <td><button class="btn btn-secondary small oe-ex-save">Save</button> <button class="btn btn-ghost small oe-ex-remove">✖ Remove</button></td>
+    </tr>`;
+  }).join("");
+  document.getElementById("oeExistingSection").classList.remove("hidden");
+}
+
+// Asks first when an order is already finished or cancelled, since changing it
+// then is unusual and moves totals people may already have relied on.
+function confirmLockedOrder(orderId, verb) {
+  const order = CACHE.orders.find((o) => o.id === orderId);
+  if (order && ["Collected", "Delivered", "Cancelled"].includes(order.status)) {
+    return confirm(`This order is already marked ${order.status}. Are you sure you want to ${verb} a line on it?`);
+  }
+  return true;
+}
+
+async function afterExistingLineChange(orderId, text) {
+  await loadOrderBalances();
+  await renderExistingLines(orderId);
+  recalcOeTotals();
+  renderDashboard();
+  showMsg("oeExistingMsg", text, "success");
+}
+
+async function saveExistingLine(tr) {
+  const orderId = document.getElementById("oeOrderId").value;
+  const line = oeExistingLines.find((l) => String(l.id) === String(tr.dataset.id));
+  if (!orderId || !line) return;
+
+  const weightRaw = tr.querySelector(".oe-ex-weight").value;
+  const priceRaw = tr.querySelector(".oe-ex-price").value;
+  const qtyRaw = tr.querySelector(".oe-ex-qty").value;
+  const weight = Number(weightRaw);
+  const price = Number(priceRaw);
+  if (!(weight > 0)) { showMsg("oeExistingMsg", "Enter a weight above 0.", "error"); return; }
+  if (priceRaw === "" || !(price >= 0)) { showMsg("oeExistingMsg", "Enter a price per kg (0 or more).", "error"); return; }
+  if (qtyRaw !== "" && !(Number(qtyRaw) >= 0)) { showMsg("oeExistingMsg", "Quantity must be 0 or more, or left blank.", "error"); return; }
+  if (!confirmLockedOrder(orderId, "change")) return;
+
+  const update = { weight_kg: weight, price_per_kg: price, quantity: qtyRaw === "" ? null : Number(qtyRaw) };
+  if (line.product_name === "TURKEY WHOLE") {
+    update.turkey_type = tr.querySelector(".oe-ex-ttype").value || null;
+    update.weight_mode = tr.querySelector(".oe-ex-wmode").value || null;
+    const range = tr.querySelector(".oe-ex-range").value;
+    update.weight_range_kg = range === "" ? null : Number(range);
+    update.turkey_number = tr.querySelector(".oe-ex-tnum").value.trim() || null;
+  } else if (line.category === "Turkey Breast Roll") {
+    update.stuffing_type = tr.querySelector(".oe-ex-stuff").value || null;
+  }
+
+  const { error } = await sb.from("order_details").update(update).eq("id", line.id);
+  if (error) { showMsg("oeExistingMsg", error.message, "error"); return; }
+  await afterExistingLineChange(orderId, `Line ${line.line_no} saved.`);
+}
+
+async function removeExistingLine(tr) {
+  const orderId = document.getElementById("oeOrderId").value;
+  const line = oeExistingLines.find((l) => String(l.id) === String(tr.dataset.id));
+  if (!orderId || !line) return;
+  if (!confirmLockedOrder(orderId, "remove")) return;
+  if (!confirm(`Remove line ${line.line_no} (${line.product_name}, ${line.weight_kg} kg) from ${orderId}? This changes the order total.`)) return;
+
+  const { error } = await sb.from("order_details").delete().eq("id", line.id);
+  if (error) { showMsg("oeExistingMsg", error.message, "error"); return; }
+  await afterExistingLineChange(orderId, `Line ${line.line_no} removed.`);
+}
+
+// Marks the order Cancelled. The order and its payments stay on record.
+async function cancelOrder() {
+  const orderId = document.getElementById("oeOrderId").value;
+  const order = CACHE.orders.find((o) => o.id === orderId);
+  if (!orderId || !order) { showMsg("oeMsg", "There is no saved order to cancel. Choose a customer who has an order.", "error"); return; }
+  if (order.status === "Cancelled") { showMsg("oeMsg", `Order ${orderId} is already cancelled.`, "error"); return; }
+
+  let text = `Cancel order ${orderId}? It stays on record, marked Cancelled, and no longer counts in the order totals or turkey numbers.`;
+  if (order.amount_paid > 0.005) {
+    text += `\n\n${money(order.amount_paid)} has been paid on this order. The payment stays on record. Record any refund on Customer Search.`;
+  }
+  if (!confirm(text)) return;
+
+  const { error } = await sb.from("orders").update({ status: "Cancelled" }).eq("id", orderId);
+  if (error) { showMsg("oeMsg", error.message, "error"); return; }
+  document.getElementById("oeStatus").value = "Cancelled";
+  await loadOrderBalances();
+  populateOrderDropdown();
+  renderDashboard();
+  showMsg("oeMsg", `Order ${orderId} cancelled. To reopen it, change Status and click Save Order.`, "success");
 }
 
 async function createCustomerInline() {
@@ -723,6 +881,7 @@ function clearOrderForm() {
   document.getElementById("oeCollectionDate").value = "";
   document.getElementById("oeDeliveryDate").value = "";
   document.querySelector("#oeLinesTable tbody").innerHTML = "";
+  hideExistingLines();
   addOeLine();
   recalcOeTotals();
 }
@@ -737,24 +896,63 @@ function showMsg(elId, text, type) {
 // CUSTOMER SEARCH
 // ---------------------------------------------------------------------------
 function wireCustomerSearch() {
-  document.getElementById("csCustomer").addEventListener("change", renderCustomerProfile);
+  document.getElementById("csCustomer").addEventListener("change", () => {
+    renderCustomerProfile();
+    fillCustomerEditForm();
+  });
   document.getElementById("csPayBtn").addEventListener("click", recordPayment);
-  document.getElementById("csEmailSaveBtn").addEventListener("click", saveCustomerEmail);
+  document.getElementById("csEditSaveBtn").addEventListener("click", saveCustomerDetails);
 }
 
-async function saveCustomerEmail() {
+// Fills the "Edit customer details" form from the selected customer. Only done when
+// the customer changes (or after a save), so half-typed edits aren't wiped by a refresh.
+function fillCustomerEditForm() {
+  const cust = CACHE.customers.find((c) => c.id === document.getElementById("csCustomer").value);
+  const set = (id, v) => { document.getElementById(id).value = v == null ? "" : v; };
+  set("csEditName", cust && cust.name);
+  set("csEditPhone", cust && cust.telephone);
+  set("csEditEmail", cust && cust.email);
+  set("csEditAddress", cust && cust.address);
+  set("csEditDelivery", (cust && cust.delivery_method) || "Unknown");
+  // Anything other than a clear "Y" shows as No, so saving never grants consent by accident
+  set("csEditOptIn", cust && cust.marketing_opt_in === "Y" ? "Y" : "N");
+  set("csEditNotes", cust && cust.notes);
+  showMsg("csEditMsg", "", "");
+}
+
+async function saveCustomerDetails() {
   const custId = document.getElementById("csCustomer").value;
-  if (!custId) { showMsg("csEmailMsg", "Select a customer first.", "error"); return; }
-  const email = document.getElementById("csEmailInput").value.trim();
+  if (!custId) { showMsg("csEditMsg", "Select a customer first.", "error"); return; }
+
+  const val = (id) => document.getElementById(id).value.trim();
+  const name = val("csEditName");
+  const email = val("csEditEmail");
+  if (!name) { showMsg("csEditMsg", "The name can't be empty.", "error"); return; }
   if (email && !looksLikeEmail(email)) {
-    showMsg("csEmailMsg", "That email address doesn't look right. Check it, or clear the box to remove it.", "error");
+    showMsg("csEditMsg", "That email address doesn't look right. Check it, or clear the box to remove it.", "error");
     return;
   }
-  const { error } = await sb.from("customers").update({ email: email || null }).eq("id", custId);
-  if (error) { showMsg("csEmailMsg", error.message, "error"); return; }
+
+  const { error } = await sb.from("customers").update({
+    name,
+    telephone: val("csEditPhone") || null,
+    email: email || null,
+    address: val("csEditAddress") || null,
+    delivery_method: document.getElementById("csEditDelivery").value,
+    marketing_opt_in: document.getElementById("csEditOptIn").value,
+    notes: val("csEditNotes") || null,
+  }).eq("id", custId);
+  if (error) { showMsg("csEditMsg", error.message, "error"); return; }
+
+  // Refresh everything that shows the customer's name
   await loadCustomers();
+  await loadOrderBalances();
+  populateAllCustomerDropdowns();
+  populateOrderDropdown();
   renderCustomerProfile();
-  showMsg("csEmailMsg", email ? "Email saved." : "Email removed.", "success");
+  fillCustomerEditForm();
+  renderDashboard();
+  showMsg("csEditMsg", "Details saved.", "success");
 }
 
 function renderCustomerProfile() {
@@ -762,14 +960,12 @@ function renderCustomerProfile() {
   const cust = CACHE.customers.find((c) => c.id === custId);
   if (!cust) {
     ["csName", "csPhone", "csEmail", "csAddress", "csDelivery", "csOptIn", "csNotes"].forEach((id) => (document.getElementById(id).textContent = "—"));
-    document.getElementById("csEmailInput").value = "";
     document.querySelector("#csOrdersTable tbody").innerHTML = "";
     return;
   }
   document.getElementById("csName").textContent = cust.name || "—";
   document.getElementById("csPhone").textContent = cust.telephone || "—";
   document.getElementById("csEmail").textContent = cust.email || "—";
-  document.getElementById("csEmailInput").value = cust.email || "";
   document.getElementById("csAddress").textContent = cust.address || "—";
   document.getElementById("csDelivery").textContent = cust.delivery_method || "—";
   document.getElementById("csOptIn").textContent = cust.marketing_opt_in || "—";
@@ -1800,12 +1996,12 @@ const HELP_TOPICS = [
   {
     id: "orderEntry", title: "Order Entry — Pre-Orders",
     keywords: ["order entry", "pre-order", "christmas order", "new order", "turkey number", "delivery method", "collection date"],
-    body: "Choose the customer (or create a new one), set delivery method/status/dates, add each item with its weight or quantity, then Save Order. You can save just to update delivery/status without adding new items.",
+    body: "Choose the customer (or create a new one), set delivery method/status/dates, add each item with its weight or quantity, then Save Order. You can save just to update delivery/status without adding new items. If the customer already has an order, its saved lines appear at the top: change a weight, price or detail and click Save on that line, or Remove it. Cancel Order marks the whole order Cancelled; it stays on record but no longer counts in totals or turkey numbers.",
   },
   {
     id: "customerSearch", title: "Customer Search & Payments",
     keywords: ["customer search", "find customer", "record payment", "deposit", "balance", "refund"],
-    body: "Pick the customer to see their profile and balance. To add or change their email, type it in the email box and click Save email. To record a deposit or payment: enter the amount, choose the type, click Record Payment. Fully settling the balance automatically marks the order Ready.",
+    body: "Pick the customer to see their profile and balance. To change their name, phone, email, address, delivery preference, marketing opt-in or notes, open Edit customer details, change them and click Save details. To record a deposit or payment: enter the amount, choose the type, click Record Payment. Fully settling the balance automatically marks the order Ready.",
   },
   {
     id: "invoice", title: "Invoice",
