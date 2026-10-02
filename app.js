@@ -20,6 +20,8 @@ let CACHE = {
   turkeyTiers: [],
   orders: [],        // from order_balances view, joined with customer name
   unassigned: [],
+  season: null,      // the current season, e.g. "Christmas 2026" (stored in the settings table)
+  viewSeason: null,  // which season the reports show: a season name, or "ALL"
 };
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireCheckout();
   wireSalesHistory();
   wireTurkeyStock();
+  wireSeason();
   wireBackup();
   wireSecurity();
   wireHelp();
@@ -188,8 +191,13 @@ function wireTabs() {
 // Shared data loading
 // ---------------------------------------------------------------------------
 async function refreshAllData() {
-  await Promise.all([loadCustomers(), loadProducts(), loadTurkeyTiers(), loadUnassigned()]);
+  const previousSeason = CACHE.season;
+  await Promise.all([loadCustomers(), loadProducts(), loadTurkeyTiers(), loadUnassigned(), loadSettings()]);
+  // If another device started a new season, follow it. First load: view the current season.
+  if (!CACHE.viewSeason || (previousSeason && previousSeason !== CACHE.season)) CACHE.viewSeason = CACHE.season;
   await loadOrderBalances();
+  populateSeasonSelect();
+  renderSeasonStatus();
   populateAllCustomerDropdowns();
   populateOrderDropdown();
   renderDashboard();
@@ -255,12 +263,93 @@ function populateAllCustomerDropdowns() {
   resSelect.innerHTML = `<option value="">— none —</option>` + opts;
 }
 
+// ---------------------------------------------------------------------------
+// SEASONS — each order belongs to a season (e.g. "Christmas 2026"), so a new
+// Christmas starts clean while last year's orders stay on record.
+// ---------------------------------------------------------------------------
+async function loadSettings() {
+  const { data, error } = await sb.from("settings").select("*").eq("key", "current_season").maybeSingle();
+  if (error) console.error("settings:", error);
+  const fallback = `Christmas ${new Date().getFullYear()}`;
+  CACHE.season = (data && data.value) || CACHE.season || fallback;
+}
+
+// Orders saved before seasons existed count as the current season.
+function orderSeason(o) { return o.season || CACHE.season; }
+function inViewSeason(o) { return CACHE.viewSeason === "ALL" || orderSeason(o) === CACHE.viewSeason; }
+function viewOrders() { return CACHE.orders.filter(inViewSeason); }
+function viewSeasonLabel() { return CACHE.viewSeason === "ALL" ? "all seasons" : CACHE.viewSeason; }
+
+function populateSeasonSelect() {
+  const el = document.getElementById("seasonSelect");
+  if (!el) return;
+  const seasons = Array.from(new Set([CACHE.season, ...CACHE.orders.map(orderSeason)])).filter(Boolean).sort().reverse();
+  el.innerHTML = seasons
+    .map((s) => `<option value="${escHtml(s)}">${escHtml(s)}${s === CACHE.season ? " (current)" : ""}</option>`)
+    .join("") + `<option value="ALL">All seasons</option>`;
+  if (CACHE.viewSeason !== "ALL" && !seasons.includes(CACHE.viewSeason)) CACHE.viewSeason = CACHE.season;
+  el.value = CACHE.viewSeason;
+}
+
+function renderSeasonStatus() {
+  const el = document.getElementById("seasonCurrent");
+  if (el) el.textContent = `Current season: ${CACHE.season}`;
+}
+
+function wireSeason() {
+  document.getElementById("seasonSelect").addEventListener("change", (e) => {
+    CACHE.viewSeason = e.target.value;
+    populateOrderDropdown();
+    renderDashboard();
+    if (document.getElementById("tab-turkeyPlanning").classList.contains("active")) renderTurkeyPlanning();
+    if (lastMarketingResults.length > 0) generateMarketingList();
+  });
+  document.getElementById("seasonNewBtn").addEventListener("click", startNewSeason);
+}
+
+async function startNewSeason() {
+  const suggestion = `Christmas ${new Date().getFullYear() + 1}`;
+  const name = (prompt(`Name for the new season, for example "${suggestion}":`, "") || "").trim();
+  if (!name) return;
+  if (name.length > 40) { showMsg("seasonMsg", "Please use a shorter name (40 characters or fewer).", "error"); return; }
+  if (name === CACHE.season) { showMsg("seasonMsg", `${name} is already the current season.`, "error"); return; }
+  if (!confirm(`Start "${name}"?\n\nOrders from ${CACHE.season} stay on record and can be viewed with the Season box at the top. From now on new orders go into ${name}.\n\nHave you taken a backup first?`)) return;
+
+  const { error } = await sb.from("settings").upsert({ key: "current_season", value: name });
+  if (error) { showMsg("seasonMsg", error.message + " (has the seasons SQL been run in Supabase?)", "error"); return; }
+  CACHE.season = name;
+  CACHE.viewSeason = name;
+  populateSeasonSelect();
+  renderSeasonStatus();
+  populateOrderDropdown();
+  renderDashboard();
+  showMsg("seasonMsg", `${name} is now the current season.`, "success");
+}
+
+// Order IDs: the first order for a customer is ORD-C009, any further ones ORD-C009-2, -3 ...
+function nextOrderId(custId) {
+  const base = "ORD-" + custId;
+  const taken = new Set(CACHE.orders.map((o) => o.id));
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+// Invoice number follows the order: ORD-C009 -> INV-C009, ORD-C009-2 -> INV-C009-2
+function invoiceNumberFor(order) { return "INV-" + order.id.replace(/^ORD-/, ""); }
+
 function populateOrderDropdown() {
   const el = document.getElementById("invOrder");
-  const opts = CACHE.orders
-    .map((o) => `<option value="${o.id}">${o.id} — ${o.customer_name}</option>`)
+  // Every order, current season first, with the season shown so similar ones can be told apart
+  const sorted = [...CACHE.orders].sort((a, b) =>
+    (orderSeason(a) === CACHE.season ? 0 : 1) - (orderSeason(b) === CACHE.season ? 0 : 1) || a.id.localeCompare(b.id));
+  const opts = sorted
+    .map((o) => `<option value="${escHtml(o.id)}">${escHtml(o.id)} — ${escHtml(o.customer_name)} — ${escHtml(orderSeason(o))}</option>`)
     .join("");
+  const keep = el.value;
   el.innerHTML = `<option value="">— select —</option>` + opts;
+  if (keep && sorted.some((o) => o.id === keep)) el.value = keep;
 }
 
 // Escape text before putting user-typed values (like an email address) into innerHTML.
@@ -338,10 +427,13 @@ async function nextSequentialId(table, prefix, digits) {
 function renderDashboard() {
   // Cancelled orders stay on record but don't count as order value or money still owed.
   // Deposits received still counts everything actually paid in.
-  const activeOrders = CACHE.orders.filter((o) => o.status !== "Cancelled");
+  const shown = viewOrders();
+  const activeOrders = shown.filter((o) => o.status !== "Cancelled");
   const totalOrderValue = activeOrders.reduce((s, o) => s + o.subtotal, 0);
-  const totalPaid = CACHE.orders.reduce((s, o) => s + o.amount_paid, 0);
+  const totalPaid = shown.reduce((s, o) => s + o.amount_paid, 0);
   const totalBalance = activeOrders.reduce((s, o) => s + o.balance_due, 0);
+  const seasonNote = document.getElementById("dashSeasonNote");
+  if (seasonNote) seasonNote.textContent = `Showing orders for: ${viewSeasonLabel()}`;
   const totalUnassigned = CACHE.unassigned.reduce((s, u) => s + Number(u.total || 0), 0);
 
   document.getElementById("kpiTotalOrderValue").textContent = money(totalOrderValue);
@@ -350,10 +442,10 @@ function renderDashboard() {
   document.getElementById("kpiUnassigned").textContent = money(totalUnassigned);
 
   const tbody = document.querySelector("#dashOrdersTable tbody");
-  tbody.innerHTML = CACHE.orders
+  tbody.innerHTML = shown
     .map(
       (o) => `<tr>
-        <td>${o.customer_name}</td><td>${o.status}</td><td>${paymentStatusFor(o)}</td><td>${o.delivery_method || ""}</td>
+        <td>${o.customer_name}</td><td>${o.id}</td><td>${escHtml(orderSeason(o))}</td><td>${o.status}</td><td>${paymentStatusFor(o)}</td><td>${o.delivery_method || ""}</td>
         <td>${money(o.subtotal)}</td><td>${money(o.amount_paid)}</td><td>${money(o.balance_due)}</td>
       </tr>`
     )
@@ -379,7 +471,7 @@ function renderStatusPaymentBreakdown() {
   const statusEl = document.getElementById("statusBreakdown");
   statusEl.innerHTML = statusOrder
     .map((status) => {
-      const matches = CACHE.orders.filter((o) => o.status === status);
+      const matches = viewOrders().filter((o) => o.status === status);
       if (matches.length === 0) return "";
       const total = matches.reduce((s, o) => s + o.subtotal, 0);
       return cardHtml(total, `${status} (${matches.length} order${matches.length === 1 ? "" : "s"})`);
@@ -391,7 +483,7 @@ function renderStatusPaymentBreakdown() {
   const paymentEl = document.getElementById("paymentBreakdown");
   paymentEl.innerHTML = paymentOrder
     .map((state) => {
-      const matches = CACHE.orders.filter((o) => paymentStatusFor(o) === state);
+      const matches = viewOrders().filter((o) => paymentStatusFor(o) === state);
       const total = matches.reduce((s, o) => s + o.subtotal, 0);
       return cardHtml(total, `${state} (${matches.length} order${matches.length === 1 ? "" : "s"})`);
     })
@@ -451,8 +543,12 @@ let chartInstance = null;
 function renderOrderChart() {
   const ctx = document.getElementById("orderChart");
   if (!ctx || !window.Chart) return;
-  const labels = CACHE.orders.map((o) => o.customer_name);
-  const values = CACHE.orders.map((o) => o.subtotal);
+  const chartOrders = viewOrders();
+  const nameCount = {};
+  chartOrders.forEach((o) => { nameCount[o.customer_name] = (nameCount[o.customer_name] || 0) + 1; });
+  // A customer with more than one order in view gets the order ID added so the bars can be told apart
+  const labels = chartOrders.map((o) => (nameCount[o.customer_name] > 1 ? `${o.customer_name} (${o.id})` : o.customer_name));
+  const values = chartOrders.map((o) => o.subtotal);
   if (chartInstance) chartInstance.destroy();
   chartInstance = new Chart(ctx, {
     type: "bar",
@@ -466,6 +562,7 @@ function renderOrderChart() {
 // ---------------------------------------------------------------------------
 function wireOrderEntry() {
   document.getElementById("oeCustomer").addEventListener("change", onOeCustomerChange);
+  document.getElementById("oeOrderPick").addEventListener("change", applyOeOrderSelection);
   document.getElementById("oeAddLineBtn").addEventListener("click", () => addOeLine());
   document.getElementById("oeSaveBtn").addEventListener("click", saveOrder);
   document.getElementById("oeClearBtn").addEventListener("click", clearOrderForm);
@@ -501,29 +598,58 @@ function wireOrderEntry() {
 
 async function onOeCustomerChange() {
   const custId = document.getElementById("oeCustomer").value;
+  const pick = document.getElementById("oeOrderPick");
   if (!custId) {
+    pick.innerHTML = "";
     document.getElementById("oeOrderId").value = "";
+    document.getElementById("oeSeason").value = "";
+    hideExistingLines();
     return;
   }
-  const orderId = "ORD-" + custId;
-  document.getElementById("oeOrderId").value = orderId;
 
-  const existing = CACHE.orders.find((o) => o.id === orderId);
-  if (existing) {
+  // This customer's orders, current season first, then a "new order" choice
+  const orders = CACHE.orders
+    .filter((o) => o.customer_id === custId)
+    .sort((a, b) => (orderSeason(a) === CACHE.season ? 0 : 1) - (orderSeason(b) === CACHE.season ? 0 : 1) || a.id.localeCompare(b.id));
+  const newLabel = orders.length > 0 ? `➕ New separate order (${CACHE.season})` : `New order (${CACHE.season})`;
+  pick.innerHTML = orders
+    .map((o) => `<option value="${escHtml(o.id)}">${escHtml(o.id)} · ${escHtml(orderSeason(o))} · ${escHtml(o.status)} · ${money(o.subtotal)}</option>`)
+    .join("") + `<option value="__NEW__">${escHtml(newLabel)}</option>`;
+
+  // Default: add to this season's order if there is one, otherwise start a new one
+  const current = orders.find((o) => orderSeason(o) === CACHE.season && o.status !== "Cancelled");
+  pick.value = current ? current.id : "__NEW__";
+  applyOeOrderSelection();
+}
+
+function applyOeOrderSelection() {
+  const custId = document.getElementById("oeCustomer").value;
+  const choice = document.getElementById("oeOrderPick").value;
+  if (!custId) return;
+
+  if (choice === "__NEW__") {
+    const newId = nextOrderId(custId);
+    document.getElementById("oeOrderId").value = newId;
+    document.getElementById("oeSeason").value = CACHE.season;
+    document.getElementById("oeDelivery").value = "Unknown";
+    document.getElementById("oeStatus").value = "Pending";
+    document.getElementById("oeCollectionDate").value = "";
+    document.getElementById("oeDeliveryDate").value = "";
+    const hasOthers = CACHE.orders.some((o) => o.customer_id === custId);
+    showMsg("oeMsg", hasOthers ? `This will be a new separate order (${newId}) in ${CACHE.season}.` : "", hasOthers ? "success" : "");
+    hideExistingLines();
+  } else {
+    const existing = CACHE.orders.find((o) => o.id === choice);
+    if (!existing) return;
+    document.getElementById("oeOrderId").value = existing.id;
+    document.getElementById("oeSeason").value = orderSeason(existing);
     document.getElementById("oeDelivery").value = existing.delivery_method || "Unknown";
     document.getElementById("oeStatus").value = existing.status || "Pending";
     // Show the saved dates too, so saving the order doesn't blank them out
     document.getElementById("oeCollectionDate").value = existing.collection_date || "";
     document.getElementById("oeDeliveryDate").value = existing.delivery_date || "";
-    showMsg("oeMsg", "An order already exists for this customer — new lines will be added to it.", "success");
-    renderExistingLines(orderId);
-  } else {
-    document.getElementById("oeDelivery").value = "Unknown";
-    document.getElementById("oeStatus").value = "Pending";
-    document.getElementById("oeCollectionDate").value = "";
-    document.getElementById("oeDeliveryDate").value = "";
-    showMsg("oeMsg", "", "");
-    hideExistingLines();
+    showMsg("oeMsg", `Order ${existing.id} (${orderSeason(existing)}) is selected — new lines will be added to it. For a separate order, choose New separate order in the Order box.`, "success");
+    renderExistingLines(existing.id);
   }
   recalcOeTotals();
 }
@@ -786,8 +912,8 @@ function recalcOeTotals() {
   });
   document.getElementById("oeSubtotal").textContent = money(subtotal);
 
-  const custId = document.getElementById("oeCustomer").value;
-  const existing = CACHE.orders.find((o) => o.customer_id === custId);
+  const currentOrderId = document.getElementById("oeOrderId").value;
+  const existing = CACHE.orders.find((o) => o.id === currentOrderId);
   const paid = existing ? existing.amount_paid : 0;
   document.getElementById("oeDeposit").textContent = money(paid);
   // Balance shown = (already-saved subtotal for this order, if any) + new unsaved lines - amount paid
@@ -839,7 +965,8 @@ async function saveOrder() {
 
   if (!existing) {
     const { error } = await sb.from("orders").insert({
-      id: orderId, customer_id: custId, status, delivery_method: delivery,
+      id: orderId, customer_id: custId, season: document.getElementById("oeSeason").value || CACHE.season,
+      status, delivery_method: delivery,
       collection_date: collectionDate, delivery_date: deliveryDate,
     });
     if (error) { showMsg("oeMsg", error.message, "error"); return; }
@@ -875,6 +1002,8 @@ async function saveOrder() {
 
 function clearOrderForm() {
   document.getElementById("oeCustomer").value = "";
+  document.getElementById("oeOrderPick").innerHTML = "";
+  document.getElementById("oeSeason").value = "";
   document.getElementById("oeOrderId").value = "";
   document.getElementById("oeDelivery").value = "Unknown";
   document.getElementById("oeStatus").value = "Pending";
@@ -961,6 +1090,7 @@ function renderCustomerProfile() {
   if (!cust) {
     ["csName", "csPhone", "csEmail", "csAddress", "csDelivery", "csOptIn", "csNotes"].forEach((id) => (document.getElementById(id).textContent = "—"));
     document.querySelector("#csOrdersTable tbody").innerHTML = "";
+    document.getElementById("csPayOrder").innerHTML = "";
     return;
   }
   document.getElementById("csName").textContent = cust.name || "—";
@@ -971,9 +1101,27 @@ function renderCustomerProfile() {
   document.getElementById("csOptIn").textContent = cust.marketing_opt_in || "—";
   document.getElementById("csNotes").textContent = cust.notes || "—";
 
-  const orders = CACHE.orders.filter((o) => o.customer_id === custId);
+  const orders = CACHE.orders
+    .filter((o) => o.customer_id === custId)
+    .sort((a, b) => (orderSeason(a) === CACHE.season ? 0 : 1) - (orderSeason(b) === CACHE.season ? 0 : 1) || a.id.localeCompare(b.id));
+
+  // Which order a payment goes to: keep the choice if still valid, otherwise this season's
+  // order that still owes money, then any order from this season, then the first one.
+  const payEl = document.getElementById("csPayOrder");
+  const previousChoice = payEl.value;
+  payEl.innerHTML = orders.length === 0
+    ? `<option value="">No order yet</option>`
+    : orders.map((o) => `<option value="${escHtml(o.id)}">${escHtml(o.id)} · ${escHtml(orderSeason(o))} · balance ${money(o.balance_due)}</option>`).join("");
+  if (orders.some((o) => o.id === previousChoice)) {
+    payEl.value = previousChoice;
+  } else if (orders.length > 0) {
+    const thisSeason = orders.filter((o) => orderSeason(o) === CACHE.season && o.status !== "Cancelled");
+    const pick = thisSeason.find((o) => o.balance_due > 0.005) || thisSeason[0] || orders[0];
+    payEl.value = pick.id;
+  }
+
   document.querySelector("#csOrdersTable tbody").innerHTML = orders
-    .map((o) => `<tr><td>${o.id}</td><td>${o.status}</td><td>${paymentStatusFor(o)}</td><td>${o.delivery_method || ""}</td><td>${money(o.subtotal)}</td><td>${money(o.amount_paid)}</td><td>${money(o.balance_due)}</td></tr>`)
+    .map((o) => `<tr><td>${o.id}</td><td>${escHtml(orderSeason(o))}</td><td>${o.status}</td><td>${paymentStatusFor(o)}</td><td>${o.delivery_method || ""}</td><td>${money(o.subtotal)}</td><td>${money(o.amount_paid)}</td><td>${money(o.balance_due)}</td></tr>`)
     .join("");
 }
 
@@ -985,8 +1133,8 @@ async function recordPayment() {
   if (!custId) { showMsg("csMsg", "Select a customer first.", "error"); return; }
   if (!amount || amount <= 0) { showMsg("csMsg", "Enter a positive amount.", "error"); return; }
 
-  const orderId = "ORD-" + custId;
-  const orderExists = CACHE.orders.some((o) => o.id === orderId);
+  const orderId = document.getElementById("csPayOrder").value;
+  const orderExists = !!orderId && CACHE.orders.some((o) => o.id === orderId);
   if (!orderExists) {
     if (!confirm(`No order exists yet for ${custId}. Record the payment anyway? It will apply once an order is saved for them.`)) return;
   }
@@ -1075,7 +1223,7 @@ async function generateInvoice() {
   const { data: lines, error } = await sb.from("order_details").select("*").eq("order_id", orderId).order("line_no");
   if (error) { showMsg("invMsg", error.message, "error"); return; }
 
-  document.getElementById("invNumber").textContent = "INV-" + order.customer_id;
+  document.getElementById("invNumber").textContent = invoiceNumberFor(order);
   document.getElementById("invDate").textContent = new Date().toLocaleDateString("en-GB");
   document.getElementById("invOrderId").textContent = orderId;
   document.getElementById("invBillName").textContent = cust ? cust.name : order.customer_id;
@@ -1093,7 +1241,7 @@ async function generateInvoice() {
   currentInvoice = {
     email: cust ? cust.email || "" : "",
     name: cust ? cust.name : order.customer_id,
-    number: "INV-" + order.customer_id,
+    number: invoiceNumberFor(order),
     orderId,
     date: new Date().toLocaleDateString("en-GB"),
     delivery: "Delivery method: " + (order.delivery_method || "Unknown"),
@@ -1125,10 +1273,14 @@ function generateMarketingList() {
     .filter((c) => deliveryFilter === "Any" || (c.delivery_method || "Unknown") === deliveryFilter)
     .filter((c) => optInFilter === "Any" || (c.marketing_opt_in || "") === optInFilter)
     .map((c) => {
-      const order = CACHE.orders.find((o) => o.customer_id === c.id);
-      return { ...c, order_total: order ? order.subtotal : 0 };
+      // Total of this customer's orders in the season being viewed (cancelled orders left out)
+      const total = CACHE.orders
+        .filter((o) => o.customer_id === c.id && o.status !== "Cancelled" && inViewSeason(o))
+        .reduce((s, o) => s + o.subtotal, 0);
+      return { ...c, order_total: total };
     });
 
+  document.getElementById("mktSeasonNote").textContent = `Order Total is for: ${viewSeasonLabel()}`;
   document.querySelector("#mktTable tbody").innerHTML = lastMarketingResults
     .map((c) => `<tr><td>${c.id}</td><td>${c.name}</td><td>${c.telephone || ""}</td><td>${escHtml(c.email)}</td><td>${c.delivery_method || ""}</td><td>${money(c.order_total)}</td></tr>`)
     .join("");
@@ -1204,11 +1356,13 @@ async function resolveUnassigned() {
     if (error) { showMsg("resMsg", error.message, "error"); return; }
   }
 
-  const orderId = "ORD-" + custId;
+  // Add to the customer's order for the current season if they have one, otherwise start a new one
+  const currentOrder = CACHE.orders.find((o) => o.customer_id === custId && orderSeason(o) === CACHE.season && o.status !== "Cancelled");
+  const orderId = currentOrder ? currentOrder.id : nextOrderId(custId);
   const { data: existingOrder } = await sb.from("orders").select("id").eq("id", orderId).maybeSingle();
   if (!existingOrder) {
     const { error } = await sb.from("orders").insert({
-      id: orderId, customer_id: custId, status: "Pending", delivery_method: "Unknown",
+      id: orderId, customer_id: custId, season: CACHE.season, status: "Pending", delivery_method: "Unknown",
       notes: "Includes a line resolved from Unassigned Review",
     });
     if (error) { showMsg("resMsg", error.message, "error"); return; }
@@ -1571,15 +1725,19 @@ function renderBandChart(canvasId, buckets, existingInstance, showStock) {
 async function loadTurkeyPlanningData() {
   const [linesRes, ordersRes, stockRes] = await Promise.all([
     sb.from("order_details").select("order_id,weight_kg,turkey_number,category").in("category", ["Turkey", "Turkey Misc"]),
-    sb.from("orders").select("id,status"),
+    sb.from("orders").select("id,status,season"),
     sb.from("turkey_stock").select("*").order("weight_kg"),
   ]);
   if (linesRes.error) { console.error(linesRes.error); return null; }
   if (ordersRes.error) console.error(ordersRes.error);
   if (stockRes.error) console.error("turkey_stock:", stockRes.error);
 
-  const cancelled = new Set((ordersRes.data || []).filter((o) => o.status === "Cancelled").map((o) => o.id));
-  const lines = (linesRes.data || []).filter((l) => !cancelled.has(l.order_id));
+  // Count only orders that are not cancelled and belong to the season being viewed
+  const counted = new Set((ordersRes.data || [])
+    .filter((o) => o.status !== "Cancelled" && (CACHE.viewSeason === "ALL" || (o.season || CACHE.season) === CACHE.viewSeason))
+    .map((o) => o.id));
+  const allLines = linesRes.data || [];
+  const lines = ordersRes.error ? allLines : allLines.filter((l) => counted.has(l.order_id));
   return {
     wholeLines: lines.filter((l) => l.category === "Turkey"),
     miscLines: lines.filter((l) => l.category === "Turkey Misc"),
@@ -1602,6 +1760,7 @@ async function renderTurkeyPlanning() {
   turkeyWholeChartInstance = renderBandChart("turkeyWholeChart", wholeBuckets, turkeyWholeChartInstance, hasStock);
   turkeyMiscChartInstance = renderBandChart("turkeyMiscChart", miscBuckets, turkeyMiscChartInstance, false);
 
+  document.getElementById("turkeyPlanSeasonNote").textContent = `Showing orders for: ${viewSeasonLabel()}`;
   document.getElementById("turkeyPlanStockNote").textContent = data.stockError
     ? "Turkey stock couldn't be loaded. Ask your support person to check the turkey_stock table has been created."
     : hasStock ? "" : "No turkey stock entered yet. Add it on the Turkey Stock page to see In Stock and Spare / Short here.";
@@ -1620,6 +1779,8 @@ async function renderTurkeyDashboard() {
   const stock = buckets.reduce((s, b) => s + b.stock, 0);
   const hasStock = data.stock.length > 0;
   const spare = stock - ordered;
+  const seasonSpan = document.getElementById("turkeyDashSeason");
+  if (seasonSpan) seasonSpan.textContent = `(whole birds, ${viewSeasonLabel()}; cancelled orders left out)`;
 
   const card = (value, label, warn) => `<div class="kpi-card${warn ? " kpi-warning" : ""}"><div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></div>`;
   cards.innerHTML =
@@ -1825,7 +1986,7 @@ async function viewHistoricSale(saleId) {
 // ---------------------------------------------------------------------------
 const BACKUP_TABLES = [
   "customers", "products", "turkey_pricing", "orders", "order_details",
-  "payments", "unassigned", "sales", "sale_items", "turkey_stock",
+  "payments", "unassigned", "sales", "sale_items", "turkey_stock", "settings",
 ];
 
 function wireBackup() {
@@ -1996,12 +2157,12 @@ const HELP_TOPICS = [
   {
     id: "orderEntry", title: "Order Entry — Pre-Orders",
     keywords: ["order entry", "pre-order", "christmas order", "new order", "turkey number", "delivery method", "collection date"],
-    body: "Choose the customer (or create a new one), set delivery method/status/dates, add each item with its weight or quantity, then Save Order. You can save just to update delivery/status without adding new items. If the customer already has an order, its saved lines appear at the top: change a weight, price or detail and click Save on that line, or Remove it. Cancel Order marks the whole order Cancelled; it stays on record but no longer counts in totals or turkey numbers.",
+    body: "Choose the customer (or create a new one), set delivery method/status/dates, add each item with its weight or quantity, then Save Order. You can save just to update delivery/status without adding new items. The Order box shows the customer's orders: by default new lines go into this season's order, or choose New separate order to start another one (for example ORD-C009-2). If the customer already has an order, its saved lines appear at the top: change a weight, price or detail and click Save on that line, or Remove it. Cancel Order marks the whole order Cancelled; it stays on record but no longer counts in totals or turkey numbers.",
   },
   {
     id: "customerSearch", title: "Customer Search & Payments",
     keywords: ["customer search", "find customer", "record payment", "deposit", "balance", "refund"],
-    body: "Pick the customer to see their profile and balance. To change their name, phone, email, address, delivery preference, marketing opt-in or notes, open Edit customer details, change them and click Save details. To record a deposit or payment: enter the amount, choose the type, click Record Payment. Fully settling the balance automatically marks the order Ready.",
+    body: "Pick the customer to see their profile and balance. To change their name, phone, email, address, delivery preference, marketing opt-in or notes, open Edit customer details, change them and click Save details. To record a deposit or payment: choose which order it applies to, enter the amount, choose the type, click Record Payment. Fully settling the balance automatically marks the order Ready.",
   },
   {
     id: "invoice", title: "Invoice",
@@ -2022,6 +2183,11 @@ const HELP_TOPICS = [
     id: "marketing", title: "Marketing",
     keywords: ["marketing", "mailing list", "customer list", "opt-in"],
     body: "Filter by delivery method and/or opt-in, click Generate List, then Export CSV. The list includes each customer's email address. Only email customers whose opt-in is Y.",
+  },
+  {
+    id: "seasons", title: "Seasons",
+    keywords: ["season", "new season", "last year", "christmas 2026", "old orders", "start of season", "new christmas"],
+    body: "Every order belongs to a season, such as Christmas 2026. The Season box at the top of the page chooses which season the Dashboard, Turkey Planning and Marketing totals show, or All seasons. New orders always go in the current season. At the start of a new Christmas, take a Backup and then use Start a New Season on the Backup page. Last season's orders stay on record.",
   },
   {
     id: "turkeyStock", title: "Turkey Stock",
