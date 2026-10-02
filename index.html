@@ -74,15 +74,15 @@
   </header>
 
   <main class="content">
-    <div id="seasonBar" class="no-print" style="margin:0 0 14px;font-size:13px;">
-      <label>Season: <select id="seasonSelect"></select></label>
-      <span style="color:#777;">The Dashboard, Turkey Planning and Marketing totals follow this. New orders always go in the current season.</span>
-    </div>
 
     <!-- ======================= DASHBOARD ======================= -->
     <section id="tab-dashboard" class="tab-panel active">
       <h2>Sales Dashboard</h2>
-      <p id="dashSeasonNote" style="margin:-6px 0 12px;color:#666;"></p>
+      <div id="seasonBar" class="no-print" style="margin:0 0 6px;font-size:13px;">
+        <label>Season: <select id="seasonSelect"></select></label>
+        <span style="color:#777;">Turkey Planning and the Marketing totals follow this choice too. New orders always go in the current season.</span>
+      </div>
+      <p id="dashSeasonNote" style="margin:0 0 12px;color:#666;"></p>
       <div class="kpi-row">
         <div class="kpi-card"><div class="kpi-value" id="kpiTotalOrderValue">—</div><div class="kpi-label">Total Order Value</div></div>
         <div class="kpi-card"><div class="kpi-value" id="kpiDeposits">—</div><div class="kpi-label">Deposits Received</div></div>
