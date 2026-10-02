@@ -42,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireUnassigned();
   wireCheckout();
   wireSalesHistory();
+  wireTurkeyStock();
   wireBackup();
   wireSecurity();
   wireHelp();
@@ -150,7 +151,7 @@ function onLoggedIn(user) {
 // Tabs
 // ---------------------------------------------------------------------------
 function wireTabs() {
-  const groupedTabs = ["dashboard", "salesHistory", "marketing", "turkeyPlanning", "unassigned", "backup", "security"];
+  const groupedTabs = ["dashboard", "salesHistory", "marketing", "turkeyPlanning", "turkeyStock", "unassigned", "backup", "security"];
   const reportsToggle = document.getElementById("reportsToggle");
   const reportsMenu = document.getElementById("reportsMenu");
 
@@ -169,6 +170,7 @@ function wireTabs() {
       // this page was last loaded, so don't trust the in-memory cache blindly.
       refreshAllData();
       if (btn.dataset.tab === "turkeyPlanning") renderTurkeyPlanning();
+      if (btn.dataset.tab === "turkeyStock") renderTurkeyStock();
       if (btn.dataset.tab === "salesHistory") loadAndRenderSalesHistory();
       if (btn.dataset.tab === "security") renderMfaStatus();
     });
@@ -357,6 +359,7 @@ function renderDashboard() {
   renderOrderChart();
   renderTillSalesSummary();
   renderStatusPaymentBreakdown();
+  renderTurkeyDashboard();
 }
 
 // Small KPI-style cards showing order count + total £ per Status and per
@@ -1270,14 +1273,47 @@ async function loadAllOrderDetails() {
   return data || [];
 }
 
-function bucketByWeight(lines) {
-  return TURKEY_WEIGHT_BANDS.map((band) => {
-    const matches = lines.filter((l) => Number(l.weight_kg) >= band.min && Number(l.weight_kg) <= band.max);
-    return { ...band, ordered: matches.length, allocated: matches.filter((l) => l.turkey_number).length };
-  });
+// Finds which weight band a weight belongs to. Weights that fall in the tiny
+// gaps between bands (for example 7.495) go to the band just below, so no bird
+// ever drops out of the counts.
+function findWeightBand(w) {
+  const weight = Number(w) || 0;
+  const exact = TURKEY_WEIGHT_BANDS.find((b) => weight >= b.min && weight <= b.max);
+  if (exact) return exact;
+  for (let i = TURKEY_WEIGHT_BANDS.length - 1; i >= 0; i--) {
+    if (weight >= TURKEY_WEIGHT_BANDS[i].min) return TURKEY_WEIGHT_BANDS[i];
+  }
+  return TURKEY_WEIGHT_BANDS[0];
 }
 
-function renderBandTable(tableId, buckets, showAllocation) {
+// Counts order lines per weight band and, if stock rows are given, the birds in
+// stock per band. spare = stock - ordered (negative means short).
+function bucketByWeight(lines, stockRows) {
+  const buckets = TURKEY_WEIGHT_BANDS.map((band) => ({ ...band, ordered: 0, allocated: 0, stock: 0, spare: 0 }));
+  const indexOfBand = (w) => TURKEY_WEIGHT_BANDS.indexOf(findWeightBand(w));
+  (lines || []).forEach((l) => {
+    const b = buckets[indexOfBand(l.weight_kg)];
+    b.ordered += 1;
+    if (l.turkey_number) b.allocated += 1;
+  });
+  (stockRows || []).forEach((s) => {
+    buckets[indexOfBand(s.weight_kg)].stock += Number(s.quantity) || 0;
+  });
+  buckets.forEach((b) => { b.spare = b.stock - b.ordered; });
+  return buckets;
+}
+
+// Short / tight / ok wording and colour for a band (or the total). Wording is
+// included as well as colour so it still reads clearly without colour.
+function stockStatus(ordered, stock) {
+  const spare = stock - ordered;
+  if (ordered === 0 && stock === 0) return { level: "none", text: "—", style: "" };
+  if (spare < 0) return { level: "short", text: `Short by ${-spare}`, style: "background:#f8d7da;color:#842029;font-weight:700;" };
+  if (spare <= Math.ceil(stock * 0.1)) return { level: "tight", text: `Tight (${spare} spare)`, style: "background:#fff3cd;color:#664d03;font-weight:600;" };
+  return { level: "ok", text: `${spare} spare`, style: "background:#d1e7dd;color:#0f5132;" };
+}
+
+function renderBandTable(tableId, buckets, showAllocation, hasStock) {
   const table = document.getElementById(tableId);
   const tbody = table.querySelector("tbody");
   const tfoot = table.querySelector("tfoot");
@@ -1285,7 +1321,14 @@ function renderBandTable(tableId, buckets, showAllocation) {
   tbody.innerHTML = buckets.map((b) => {
     if (showAllocation) {
       const left = b.ordered - b.allocated;
-      return `<tr><td>${b.label}</td><td>${b.ordered}</td><td>${b.allocated}</td><td>${left}</td></tr>`;
+      let stockCells = "";
+      if (hasStock) {
+        const st = stockStatus(b.ordered, b.stock);
+        stockCells = `<td>${b.stock}</td><td style="${st.style}">${st.text}</td>`;
+      } else {
+        stockCells = `<td>—</td><td>—</td>`;
+      }
+      return `<tr><td>${b.label}</td><td>${b.ordered}</td><td>${b.allocated}</td><td>${left}</td>${stockCells}</tr>`;
     }
     return `<tr><td>${b.label}</td><td>${b.ordered}</td></tr>`;
   }).join("");
@@ -1293,7 +1336,13 @@ function renderBandTable(tableId, buckets, showAllocation) {
   const totalOrdered = buckets.reduce((s, b) => s + b.ordered, 0);
   if (showAllocation) {
     const totalAllocated = buckets.reduce((s, b) => s + b.allocated, 0);
-    tfoot.innerHTML = `<tr><td>TOTAL</td><td>${totalOrdered}</td><td>${totalAllocated}</td><td>${totalOrdered - totalAllocated}</td></tr>`;
+    const totalStock = buckets.reduce((s, b) => s + b.stock, 0);
+    let stockFoot = `<td>—</td><td>—</td>`;
+    if (hasStock) {
+      const st = stockStatus(totalOrdered, totalStock);
+      stockFoot = `<td>${totalStock}</td><td style="${st.style}">${st.text}</td>`;
+    }
+    tfoot.innerHTML = `<tr><td>TOTAL</td><td>${totalOrdered}</td><td>${totalAllocated}</td><td>${totalOrdered - totalAllocated}</td>${stockFoot}</tr>`;
   } else {
     tfoot.innerHTML = `<tr><td>TOTAL</td><td>${totalOrdered}</td></tr>`;
   }
@@ -1302,36 +1351,184 @@ function renderBandTable(tableId, buckets, showAllocation) {
 let turkeyWholeChartInstance = null;
 let turkeyMiscChartInstance = null;
 
-function renderBandChart(canvasId, buckets, existingInstance) {
+function renderBandChart(canvasId, buckets, existingInstance, showStock) {
   const ctx = document.getElementById(canvasId);
   if (!ctx || !window.Chart) return existingInstance;
   if (existingInstance) existingInstance.destroy();
+  const datasets = [{ label: "Ordered", data: buckets.map((b) => b.ordered), backgroundColor: "#8B1E1E" }];
+  if (showStock) {
+    datasets.push({ label: "In stock", data: buckets.map((b) => b.stock), backgroundColor: "#7A9E7E" });
+  }
   return new Chart(ctx, {
     type: "bar",
-    data: {
-      labels: buckets.map((b) => b.label),
-      datasets: [{ label: "Ordered", data: buckets.map((b) => b.ordered), backgroundColor: "#8B1E1E" }],
-    },
+    data: { labels: buckets.map((b) => b.label), datasets },
     options: {
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: showStock } },
       scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
     },
   });
 }
 
+// Loads what the planning page and dashboard need: turkey order lines (leaving
+// out lines on Cancelled orders, so cancelled birds don't use up stock on
+// paper) and the stock rows.
+async function loadTurkeyPlanningData() {
+  const [linesRes, ordersRes, stockRes] = await Promise.all([
+    sb.from("order_details").select("order_id,weight_kg,turkey_number,category").in("category", ["Turkey", "Turkey Misc"]),
+    sb.from("orders").select("id,status"),
+    sb.from("turkey_stock").select("*").order("weight_kg"),
+  ]);
+  if (linesRes.error) { console.error(linesRes.error); return null; }
+  if (ordersRes.error) console.error(ordersRes.error);
+  if (stockRes.error) console.error("turkey_stock:", stockRes.error);
+
+  const cancelled = new Set((ordersRes.data || []).filter((o) => o.status === "Cancelled").map((o) => o.id));
+  const lines = (linesRes.data || []).filter((l) => !cancelled.has(l.order_id));
+  return {
+    wholeLines: lines.filter((l) => l.category === "Turkey"),
+    miscLines: lines.filter((l) => l.category === "Turkey Misc"),
+    stock: stockRes.error ? [] : (stockRes.data || []),
+    stockError: !!stockRes.error,
+  };
+}
+
 async function renderTurkeyPlanning() {
-  const allLines = await loadAllOrderDetails();
-  const wholeLines = allLines.filter((l) => l.category === "Turkey");
-  const miscLines = allLines.filter((l) => l.category === "Turkey Misc");
+  const data = await loadTurkeyPlanningData();
+  if (!data) return;
 
-  const wholeBuckets = bucketByWeight(wholeLines);
-  const miscBuckets = bucketByWeight(miscLines);
+  const wholeBuckets = bucketByWeight(data.wholeLines, data.stock);
+  const miscBuckets = bucketByWeight(data.miscLines);
+  const hasStock = data.stock.length > 0;
 
-  renderBandTable("turkeyWholeTable", wholeBuckets, true);
-  renderBandTable("turkeyMiscTable", miscBuckets, false);
+  renderBandTable("turkeyWholeTable", wholeBuckets, true, hasStock);
+  renderBandTable("turkeyMiscTable", miscBuckets, false, false);
 
-  turkeyWholeChartInstance = renderBandChart("turkeyWholeChart", wholeBuckets, turkeyWholeChartInstance);
-  turkeyMiscChartInstance = renderBandChart("turkeyMiscChart", miscBuckets, turkeyMiscChartInstance);
+  turkeyWholeChartInstance = renderBandChart("turkeyWholeChart", wholeBuckets, turkeyWholeChartInstance, hasStock);
+  turkeyMiscChartInstance = renderBandChart("turkeyMiscChart", miscBuckets, turkeyMiscChartInstance, false);
+
+  document.getElementById("turkeyPlanStockNote").textContent = data.stockError
+    ? "Turkey stock couldn't be loaded. Ask your support person to check the turkey_stock table has been created."
+    : hasStock ? "" : "No turkey stock entered yet. Add it on the Turkey Stock page to see In Stock and Spare / Short here.";
+}
+
+// Dashboard strip: total ordered vs in stock, and which weight bands are short.
+async function renderTurkeyDashboard() {
+  const cards = document.getElementById("turkeyDashCards");
+  const note = document.getElementById("turkeyDashNote");
+  if (!cards || !note) return;
+  const data = await loadTurkeyPlanningData();
+  if (!data) return;
+
+  const buckets = bucketByWeight(data.wholeLines, data.stock);
+  const ordered = buckets.reduce((s, b) => s + b.ordered, 0);
+  const stock = buckets.reduce((s, b) => s + b.stock, 0);
+  const hasStock = data.stock.length > 0;
+  const spare = stock - ordered;
+
+  const card = (value, label, warn) => `<div class="kpi-card${warn ? " kpi-warning" : ""}"><div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></div>`;
+  cards.innerHTML =
+    card(ordered, "Turkeys Ordered", false) +
+    card(hasStock ? stock : "—", "Turkeys In Stock", false) +
+    card(hasStock ? (spare < 0 ? `Short by ${-spare}` : `${spare} spare`) : "—", "Overall", hasStock && spare < 0);
+
+  if (data.stockError) {
+    note.textContent = "Turkey stock couldn't be loaded. Ask your support person to check the turkey_stock table has been created.";
+    return;
+  }
+  if (!hasStock) {
+    note.textContent = "No turkey stock entered yet. Add it on the Turkey Stock page.";
+    return;
+  }
+  const short = buckets.filter((b) => b.spare < 0).map((b) => `${b.label} kg (short by ${-b.spare})`);
+  const tight = buckets.filter((b) => b.ordered > 0 && b.spare >= 0 && stockStatus(b.ordered, b.stock).level === "tight").map((b) => `${b.label} kg (${b.spare} spare)`);
+  const parts = [];
+  if (short.length) parts.push("Short: " + short.join(", "));
+  if (tight.length) parts.push("Tight: " + tight.join(", "));
+  note.textContent = parts.length ? parts.join(". ") + "." : (ordered > 0 ? "Every weight band has enough stock." : "");
+}
+
+// ---------------------------------------------------------------------------
+// TURKEY STOCK (the birds you raised, entered by weight)
+// ---------------------------------------------------------------------------
+let turkeyStockRows = [];
+
+function wireTurkeyStock() {
+  document.getElementById("tsAddBtn").addEventListener("click", addTurkeyStock);
+  document.querySelector("#tsTable tbody").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-id]");
+    if (!tr) return;
+    if (e.target.classList.contains("ts-save")) saveTurkeyStockRow(tr);
+    if (e.target.classList.contains("ts-remove")) removeTurkeyStockRow(tr);
+  });
+}
+
+async function renderTurkeyStock() {
+  const { data, error } = await sb.from("turkey_stock").select("*").order("weight_kg");
+  if (error) {
+    showMsg("tsMsg", "Couldn't load turkey stock: " + error.message + " (has the turkey_stock SQL been run in Supabase?)", "error");
+    return;
+  }
+  turkeyStockRows = data || [];
+  const tbody = document.querySelector("#tsTable tbody");
+  tbody.innerHTML = turkeyStockRows.map((r) => `
+    <tr data-id="${r.id}">
+      <td><input type="number" class="ts-weight" step="0.1" min="0.1" value="${r.weight_kg}" style="width:90px"></td>
+      <td>${findWeightBand(r.weight_kg).label}</td>
+      <td><input type="number" class="ts-qty" step="1" min="0" value="${r.quantity}" style="width:90px"></td>
+      <td><input type="text" class="ts-notes" value="${escHtml(r.notes)}"></td>
+      <td><button class="btn btn-secondary small ts-save">Save</button> <button class="btn btn-ghost small ts-remove">✖ Remove</button></td>
+    </tr>`).join("");
+  const total = turkeyStockRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  document.querySelector("#tsTable tfoot").innerHTML = `<tr><td>TOTAL</td><td></td><td>${total}</td><td colspan="2"></td></tr>`;
+}
+
+// Shared checks for the add form and the Save button on a row.
+function validateTurkeyStock(weight, qty, minQty, ignoreId) {
+  if (!(weight > 0)) return "Enter a weight above 0 kg.";
+  if (!Number.isInteger(qty) || qty < minQty) return minQty > 0 ? "Enter a whole number of birds, 1 or more." : "Enter a whole number of birds, 0 or more.";
+  const dup = turkeyStockRows.find((r) => Number(r.weight_kg) === weight && String(r.id) !== String(ignoreId));
+  if (dup) return `You already have a row for ${weight} kg. Edit that row instead of adding another.`;
+  return null;
+}
+
+async function addTurkeyStock() {
+  const weight = Number(document.getElementById("tsWeight").value);
+  const qty = Number(document.getElementById("tsQty").value);
+  const notes = document.getElementById("tsNotes").value.trim();
+  const problem = validateTurkeyStock(weight, qty, 1, null);
+  if (problem) { showMsg("tsMsg", problem, "error"); return; }
+  const { error } = await sb.from("turkey_stock").insert({ weight_kg: weight, quantity: qty, notes: notes || null });
+  if (error) { showMsg("tsMsg", error.message, "error"); return; }
+  ["tsWeight", "tsQty", "tsNotes"].forEach((id) => (document.getElementById(id).value = ""));
+  showMsg("tsMsg", `Added ${qty} x ${weight} kg.`, "success");
+  await renderTurkeyStock();
+  renderTurkeyDashboard();
+}
+
+async function saveTurkeyStockRow(tr) {
+  const id = tr.dataset.id;
+  const weight = Number(tr.querySelector(".ts-weight").value);
+  const qty = Number(tr.querySelector(".ts-qty").value);
+  const notes = tr.querySelector(".ts-notes").value.trim();
+  const problem = validateTurkeyStock(weight, qty, 0, id);
+  if (problem) { showMsg("tsMsg", problem, "error"); return; }
+  const { error } = await sb.from("turkey_stock").update({ weight_kg: weight, quantity: qty, notes: notes || null }).eq("id", id);
+  if (error) { showMsg("tsMsg", error.message, "error"); return; }
+  showMsg("tsMsg", "Saved.", "success");
+  await renderTurkeyStock();
+  renderTurkeyDashboard();
+}
+
+async function removeTurkeyStockRow(tr) {
+  const id = tr.dataset.id;
+  const row = turkeyStockRows.find((r) => String(r.id) === String(id));
+  const label = row ? `${row.quantity} x ${row.weight_kg} kg` : "this row";
+  if (!confirm(`Remove ${label} from turkey stock?`)) return;
+  const { error } = await sb.from("turkey_stock").delete().eq("id", id);
+  if (error) { showMsg("tsMsg", error.message, "error"); return; }
+  showMsg("tsMsg", "Removed.", "success");
+  await renderTurkeyStock();
+  renderTurkeyDashboard();
 }
 
 // ---------------------------------------------------------------------------
@@ -1432,7 +1629,7 @@ async function viewHistoricSale(saleId) {
 // ---------------------------------------------------------------------------
 const BACKUP_TABLES = [
   "customers", "products", "turkey_pricing", "orders", "order_details",
-  "payments", "unassigned", "sales", "sale_items",
+  "payments", "unassigned", "sales", "sale_items", "turkey_stock",
 ];
 
 function wireBackup() {
@@ -1631,9 +1828,14 @@ const HELP_TOPICS = [
     body: "Filter by delivery method and/or opt-in, click Generate List, then Export CSV. The list includes each customer's email address. Only email customers whose opt-in is Y.",
   },
   {
+    id: "turkeyStock", title: "Turkey Stock",
+    keywords: ["turkey stock", "how many turkeys do we have", "inventory", "stock", "birds", "enough turkeys"],
+    body: "Type in the turkeys you have by weight, for example 100 birds of 8 kg. Use Save to change a row and Remove to delete one. The Dashboard and Turkey Planning compare this stock with what customers have ordered. Stock does not go down automatically, so update the quantities when your numbers change.",
+  },
+  {
     id: "turkeyPlanning", title: "Turkey Planning",
     keywords: ["turkey planning", "turkey allocation", "how many turkeys", "weight band", "allocated"],
-    body: "Shows whole-turkey and crown/misc orders grouped into weight bands, so you know how many birds of each size to source. \"Allocated\" means a Turkey Number has been entered against that order.",
+    body: "Shows whole-turkey and crown/misc orders grouped into weight bands, so you know how many birds of each size to source. \"Allocated\" means a Turkey Number has been entered against that order. Cancelled orders are left out. \"In Stock\" and \"Spare / Short\" compare the birds you have (from the Turkey Stock page) with what has been ordered: red means short, amber means within 10% of running out, green means enough.",
   },
   {
     id: "unassigned", title: "Unassigned",

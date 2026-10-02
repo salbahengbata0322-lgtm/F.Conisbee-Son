@@ -60,6 +60,7 @@
           <button class="tab-btn nav-dropdown-item" data-tab="salesHistory">Sales History</button>
           <button class="tab-btn nav-dropdown-item" data-tab="marketing">Marketing</button>
           <button class="tab-btn nav-dropdown-item" data-tab="turkeyPlanning">Turkey Planning</button>
+          <button class="tab-btn nav-dropdown-item" data-tab="turkeyStock">Turkey Stock</button>
           <button class="tab-btn nav-dropdown-item tab-warning" data-tab="unassigned">⚠ Unassigned</button>
           <button class="tab-btn nav-dropdown-item" data-tab="backup">💾 Backup</button>
           <button class="tab-btn nav-dropdown-item" data-tab="security">🔒 Security</button>
@@ -83,6 +84,10 @@
         <div class="kpi-card"><div class="kpi-value" id="kpiBalance">—</div><div class="kpi-label">Balance Outstanding</div></div>
         <div class="kpi-card kpi-warning"><div class="kpi-value" id="kpiUnassigned">—</div><div class="kpi-label">⚠ Unassigned</div></div>
       </div>
+
+      <h3>Turkey Stock Check <span style="font-weight:normal;font-size:0.8em;">(whole birds; cancelled orders left out)</span></h3>
+      <div class="kpi-row" id="turkeyDashCards"></div>
+      <p id="turkeyDashNote" style="margin:6px 0 14px;"></p>
 
       <h3>Orders</h3>
       <table class="data-table" id="dashOrdersTable">
@@ -399,11 +404,14 @@
         Buckets every Whole Turkey and Crown/Misc order line by weight band, so you know how many
         birds of each size to source. "Allocated" means a Turkey Number has been filled in on that
         order line (Order Entry's Turkey detail fields) — i.e. a real bird has been matched to it.
+        "In Stock" comes from the Turkey Stock page. "Spare / Short" is stock minus ordered: red means short,
+        amber means within 10% of running out, green means enough. Cancelled orders are left out.
       </p>
+      <p id="turkeyPlanStockNote" style="margin:0 0 10px;"></p>
 
       <h3>Whole Turkeys</h3>
       <table class="data-table" id="turkeyWholeTable">
-        <thead><tr><th>Weight Range (KG)</th><th>Ordered</th><th>Allocated</th><th>Left to Allocate</th></tr></thead>
+        <thead><tr><th>Weight Range (KG)</th><th>Ordered</th><th>Allocated</th><th>Left to Allocate</th><th>In Stock</th><th>Spare / Short</th></tr></thead>
         <tbody></tbody>
         <tfoot></tfoot>
       </table>
@@ -416,6 +424,30 @@
         <tfoot></tfoot>
       </table>
       <div class="chart-wrap"><canvas id="turkeyMiscChart" height="80"></canvas></div>
+    </section>
+
+    <!-- ======================= TURKEY STOCK ======================= -->
+    <section id="tab-turkeyStock" class="tab-panel">
+      <h2>Turkey Stock</h2>
+      <p class="warning-text" style="background:#EAF1FB;border-color:#1F4E78;">
+        The turkeys you have raised, by weight. For example, 100 birds of 8 kg. The Dashboard and Turkey Planning
+        compare this with what customers have ordered. Stock does not go down by itself, so change the quantities
+        here when your numbers change.
+      </p>
+
+      <div class="form-grid">
+        <label>Weight (kg) <input type="number" id="tsWeight" step="0.1" min="0.1" placeholder="e.g. 8"></label>
+        <label>Number of birds <input type="number" id="tsQty" step="1" min="1" placeholder="e.g. 100"></label>
+        <label>Note (optional) <input type="text" id="tsNotes" placeholder="e.g. Barn 2"></label>
+        <button id="tsAddBtn" class="btn btn-primary">+ Add</button>
+      </div>
+      <div id="tsMsg" class="msg-box"></div>
+
+      <table class="data-table" id="tsTable">
+        <thead><tr><th>Weight (kg)</th><th>Weight band</th><th>Birds</th><th>Note</th><th></th></tr></thead>
+        <tbody></tbody>
+        <tfoot></tfoot>
+      </table>
     </section>
 
     <!-- ======================= UNASSIGNED ======================= -->
@@ -521,7 +553,7 @@
   </footer>
 </div>
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
