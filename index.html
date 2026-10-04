@@ -11,12 +11,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Conisbee Orders">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=6">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
-<body>
+<body data-page="dashboard">
 
 <!-- ======================= LOGIN SCREEN ======================= -->
 <div id="loginScreen" class="login-screen">
@@ -57,29 +57,36 @@
 
     <nav class="sidebar-nav">
       <div class="nav-section">Sales</div>
-      <button class="tab-btn nav-item" data-tab="checkout"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3.5h3l2.6 12a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20.5 7.5H6"/></svg><span>Checkout</span></button>
-      <button class="tab-btn nav-item" data-tab="orderEntry"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="4" width="13" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6"/></svg><span>Order Entry</span></button>
-      <button class="tab-btn nav-item" data-tab="invoice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg><span>Invoice</span></button>
-      <button class="tab-btn nav-item" data-tab="customerSearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg><span>Customer Search</span></button>
+      <button class="tab-btn nav-item" data-tab="checkout" title="Checkout"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3.5h3l2.6 12a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20.5 7.5H6"/></svg><span>Checkout</span></button>
+      <button class="tab-btn nav-item" data-tab="orderEntry" title="Order Entry"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="4" width="13" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6"/></svg><span>Order Entry</span></button>
+      <button class="tab-btn nav-item" data-tab="invoice" title="Invoice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg><span>Invoice</span></button>
+      <button class="tab-btn nav-item" data-tab="customerSearch" title="Customer Search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg><span>Customer Search</span></button>
 
       <div class="nav-section">Reports</div>
-      <button class="tab-btn nav-item active" data-tab="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1"/></svg><span>Dashboard</span></button>
-      <button class="tab-btn nav-item" data-tab="salesHistory"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Sales History</span></button>
-      <button class="tab-btn nav-item" data-tab="marketing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l7 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M17.5 9a4 4 0 0 1 0 6"/></svg><span>Marketing</span></button>
+      <button class="tab-btn nav-item active" data-tab="dashboard" title="Dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1"/></svg><span>Dashboard</span></button>
+      <button class="tab-btn nav-item" data-tab="salesHistory" title="Sales History"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Sales History</span></button>
+      <button class="tab-btn nav-item" data-tab="marketing" title="Marketing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l7 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M17.5 9a4 4 0 0 1 0 6"/></svg><span>Marketing</span></button>
 
       <div class="nav-section">Turkey</div>
-      <button class="tab-btn nav-item" data-tab="turkeyPlanning"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Turkey Planning</span></button>
-      <button class="tab-btn nav-item" data-tab="turkeyStock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg><span>Turkey Stock</span></button>
-      <button class="tab-btn nav-item" data-tab="unassigned"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.3"/></svg><span>Unassigned</span><span id="unassignedBadge" class="nav-badge hidden">0</span></button>
+      <button class="tab-btn nav-item" data-tab="turkeyPlanning" title="Turkey Planning"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Turkey Planning</span></button>
+      <button class="tab-btn nav-item" data-tab="turkeyStock" title="Turkey Stock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg><span>Turkey Stock</span></button>
+      <button class="tab-btn nav-item" data-tab="unassigned" title="Unassigned"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.3"/></svg><span>Unassigned</span><span id="unassignedBadge" class="nav-badge hidden">0</span></button>
 
       <div class="nav-section">Shop admin</div>
-      <button class="tab-btn nav-item" data-tab="backup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 11l4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg><span>Backup</span></button>
-      <button class="tab-btn nav-item" data-tab="security"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Security</span></button>
+      <button class="tab-btn nav-item" data-tab="backup" title="Backup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 11l4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg><span>Backup</span></button>
+      <button class="tab-btn nav-item" data-tab="security" title="Security"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Security</span></button>
     </nav>
 
     <div class="sidebar-footer">
       <span id="userEmail" class="user-email"></span>
-      <button id="logoutBtn" class="btn btn-ghost">Log out</button>
+      <div class="footer-actions">
+        <button id="logoutBtn" class="btn btn-ghost logout-btn" title="Log out">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="M16 8l4 4-4 4M20 12H9"/></svg><span>Log out</span>
+        </button>
+        <button id="collapseBtn" class="collapse-btn" title="Collapse menu" aria-label="Collapse menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+      </div>
     </div>
   </aside>
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
@@ -94,54 +101,77 @@
 
     <!-- ======================= DASHBOARD ======================= -->
     <section id="tab-dashboard" class="tab-panel active">
-      <h2>Sales Dashboard</h2>
-      <div id="seasonBar" class="no-print" style="margin:0 0 6px;font-size:13px;">
-        <label>Season: <select id="seasonSelect"></select></label>
-        <span style="color:#777;">Turkey Planning and the Marketing totals follow this choice too. New orders always go in the current season.</span>
-      </div>
-      <p id="dashSeasonNote" style="margin:0 0 12px;color:#666;"></p>
-      <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-value" id="kpiTotalOrderValue">—</div><div class="kpi-label">Total Order Value</div></div>
-        <div class="kpi-card"><div class="kpi-value" id="kpiDeposits">—</div><div class="kpi-label">Deposits Received</div></div>
-        <div class="kpi-card"><div class="kpi-value" id="kpiBalance">—</div><div class="kpi-label">Balance Outstanding</div></div>
-        <div class="kpi-card kpi-warning"><div class="kpi-value" id="kpiUnassigned">—</div><div class="kpi-label">⚠ Unassigned</div></div>
+      <div class="dash-header">
+        <h2>Dashboard</h2>
+        <span id="dashDate" class="dash-date"></span>
       </div>
 
-      <h3>Turkey Stock Check <span id="turkeyDashSeason" style="font-weight:normal;font-size:0.8em;">(whole birds; cancelled orders left out)</span></h3>
-      <div class="kpi-row" id="turkeyDashCards"></div>
-      <p id="turkeyDashNote" style="margin:6px 0 14px;"></p>
-
-      <h3>Orders</h3>
-      <table class="data-table" id="dashOrdersTable">
-        <thead><tr><th>Customer</th><th>Order</th><th>Season</th><th>Status</th><th>Payment</th><th>Delivery</th><th>Subtotal</th><th>Paid</th><th>Balance Due</th></tr></thead>
-        <tbody></tbody>
-      </table>
-
-      <h3>Orders by Status</h3>
-      <div class="kpi-row" id="statusBreakdown"></div>
-
-      <h3>Orders by Payment</h3>
-      <div class="kpi-row" id="paymentBreakdown"></div>
-
-      <div class="chart-wrap"><canvas id="orderChart" height="90"></canvas></div>
-
-      <h3>Till Sales (Checkout)</h3>
-      <div class="kpi-row">
-        <div class="kpi-card">
-          <div class="kpi-value" id="salesTodayValue">—</div>
-          <div class="kpi-label" id="salesTodayLabel">Today</div>
+      <div class="dash-body">
+        <div id="seasonBar" class="no-print" style="margin:0 0 4px;font-size:13px;">
+          <label>Season: <select id="seasonSelect"></select></label>
+          <span style="color:#6b7a8c;">Turkey Planning and the Marketing totals follow this choice too. New orders always go in the current season.</span>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-value" id="salesWeekValue">—</div>
-          <div class="kpi-label" id="salesWeekLabel">This Week</div>
+        <p id="dashSeasonNote" style="margin:0 0 14px;color:#6b7a8c;font-size:13px;"></p>
+
+        <div class="kpi-row">
+          <div class="kpi-card"><div class="kpi-value" id="kpiTotalOrderValue">—</div><div class="kpi-label">Total Order Value</div></div>
+          <div class="kpi-card"><div class="kpi-value" id="kpiDeposits">—</div><div class="kpi-label">Deposits Received</div></div>
+          <div class="kpi-card kpi-bad"><div class="kpi-value" id="kpiBalance">—</div><div class="kpi-label">Balance Outstanding</div></div>
+          <div class="kpi-card kpi-warning"><div class="kpi-value" id="kpiUnassigned">—</div><div class="kpi-label">⚠ Unassigned</div></div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-value" id="salesMonthValue">—</div>
-          <div class="kpi-label" id="salesMonthLabel">This Month</div>
+
+        <div class="dash-grid">
+          <div class="dash-card">
+            <h3>Order value by customer</h3>
+            <canvas id="orderChart" height="130"></canvas>
+          </div>
+          <div class="dash-card">
+            <h3>Turkey stock vs orders</h3>
+            <p id="turkeyDashSeason" class="dash-sub">(whole birds; cancelled orders left out)</p>
+            <p id="turkeyDashNote" class="dash-sub dash-sub-strong"></p>
+            <div id="turkeyDashCards"></div>
+          </div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-value" id="salesYearValue">—</div>
-          <div class="kpi-label" id="salesYearLabel">This Year</div>
+
+        <div class="dash-card">
+          <h3>Orders</h3>
+          <div class="table-scroll">
+            <table class="data-table" id="dashOrdersTable">
+              <thead><tr><th>Customer</th><th>Order</th><th>Season</th><th>Status</th><th>Payment</th><th>Delivery</th><th>Subtotal</th><th>Paid</th><th>Balance Due</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="dash-grid dash-grid-2">
+          <div class="dash-card">
+            <h3>Orders by status</h3>
+            <div class="kpi-row" id="statusBreakdown"></div>
+          </div>
+          <div class="dash-card">
+            <h3>Orders by payment</h3>
+            <div class="kpi-row" id="paymentBreakdown"></div>
+          </div>
+        </div>
+
+        <div class="dash-section-title">Till sales (Checkout)</div>
+        <div class="kpi-row">
+          <div class="kpi-card">
+            <div class="kpi-value" id="salesTodayValue">—</div>
+            <div class="kpi-label" id="salesTodayLabel">Today</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-value" id="salesWeekValue">—</div>
+            <div class="kpi-label" id="salesWeekLabel">This Week</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-value" id="salesMonthValue">—</div>
+            <div class="kpi-label" id="salesMonthLabel">This Month</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-value" id="salesYearValue">—</div>
+            <div class="kpi-label" id="salesYearLabel">This Year</div>
+          </div>
         </div>
       </div>
     </section>
@@ -621,7 +651,7 @@
 
 </div>
 
-<script src="app.js?v=8"></script>
+<script src="app.js?v=11"></script>
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {

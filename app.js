@@ -161,6 +161,7 @@ function wireTabs() {
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+      document.body.dataset.page = btn.dataset.tab;   // lets the Dashboard have its own blue page style
       closeSidebar();   // on a phone the menu slides away once you pick a page
       window.scrollTo(0, 0);
 
@@ -185,7 +186,22 @@ function closeSidebar() {
   document.getElementById("sidebar").classList.remove("open");
   document.getElementById("sidebarBackdrop").classList.remove("show");
 }
+// Desktop: collapse the sidebar to a slim icon rail. The choice is remembered on this device.
+function setSidebarCollapsed(collapsed) {
+  document.getElementById("sidebar").classList.toggle("collapsed", collapsed);
+  const btn = document.getElementById("collapseBtn");
+  btn.title = collapsed ? "Expand menu" : "Collapse menu";
+  btn.setAttribute("aria-label", btn.title);
+  try { localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0"); } catch (e) { /* storage blocked: it just won't be remembered */ }
+}
+
 function wireSidebar() {
+  let startCollapsed = false;
+  try { startCollapsed = localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) { /* ignore */ }
+  setSidebarCollapsed(startCollapsed);
+  document.getElementById("collapseBtn").addEventListener("click", () => {
+    setSidebarCollapsed(!document.getElementById("sidebar").classList.contains("collapsed"));
+  });
   document.getElementById("menuBtn").addEventListener("click", () => {
     if (document.getElementById("sidebar").classList.contains("open")) closeSidebar(); else openSidebar();
   });
@@ -450,6 +466,8 @@ function renderDashboard() {
   const totalBalance = activeOrders.reduce((s, o) => s + o.balance_due, 0);
   const seasonNote = document.getElementById("dashSeasonNote");
   if (seasonNote) seasonNote.textContent = `Showing orders for: ${viewSeasonLabel()}`;
+  const dateEl = document.getElementById("dashDate");
+  if (dateEl) dateEl.textContent = new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
   const totalUnassigned = CACHE.unassigned.reduce((s, u) => s + Number(u.total || 0), 0);
 
   document.getElementById("kpiTotalOrderValue").textContent = money(totalOrderValue);
@@ -568,7 +586,7 @@ function renderOrderChart() {
   if (chartInstance) chartInstance.destroy();
   chartInstance = new Chart(ctx, {
     type: "bar",
-    data: { labels, datasets: [{ label: "Order Value (£)", data: values, backgroundColor: "#8B1E1E" }] },
+    data: { labels, datasets: [{ label: "Order Value (£)", data: values, backgroundColor: "#1F4E79", borderRadius: 4 }] },
     options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
   });
 }
@@ -1784,9 +1802,9 @@ async function renderTurkeyPlanning() {
 
 // Dashboard strip: total ordered vs in stock, and which weight bands are short.
 async function renderTurkeyDashboard() {
-  const cards = document.getElementById("turkeyDashCards");
+  const rowsEl = document.getElementById("turkeyDashCards");
   const note = document.getElementById("turkeyDashNote");
-  if (!cards || !note) return;
+  if (!rowsEl || !note) return;
   const data = await loadTurkeyPlanningData();
   if (!data) return;
 
@@ -1796,28 +1814,24 @@ async function renderTurkeyDashboard() {
   const hasStock = data.stock.length > 0;
   const spare = stock - ordered;
   const seasonSpan = document.getElementById("turkeyDashSeason");
-  if (seasonSpan) seasonSpan.textContent = `(whole birds, ${viewSeasonLabel()}; cancelled orders left out)`;
+  if (seasonSpan) seasonSpan.textContent = `Whole birds, ${viewSeasonLabel()}. Cancelled orders left out.`;
 
-  const card = (value, label, warn) => `<div class="kpi-card${warn ? " kpi-warning" : ""}"><div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></div>`;
-  cards.innerHTML =
-    card(ordered, "Turkeys Ordered", false) +
-    card(hasStock ? stock : "—", "Turkeys In Stock", false) +
-    card(hasStock ? (spare < 0 ? `Short by ${-spare}` : `${spare} spare`) : "—", "Overall", hasStock && spare < 0);
+  // One row per weight band that has orders or stock, with a green / amber / red badge
+  rowsEl.innerHTML = buckets
+    .filter((b) => b.ordered > 0 || b.stock > 0)
+    .map((b) => {
+      const badge = hasStock ? (() => { const st = stockStatus(b.ordered, b.stock); return `<span class="badge badge-${st.level}">${st.text}</span>`; })() : "";
+      return `<div class="turkey-row"><span class="turkey-band">${b.label} kg</span><span class="turkey-counts">${b.ordered} ordered · ${b.stock} in stock</span>${badge}</div>`;
+    })
+    .join("");
 
   if (data.stockError) {
     note.textContent = "Turkey stock couldn't be loaded. Ask your support person to check the turkey_stock table has been created.";
-    return;
+  } else if (!hasStock) {
+    note.textContent = `${ordered} ordered. No turkey stock entered yet. Add it on the Turkey Stock page.`;
+  } else {
+    note.textContent = `${ordered} ordered · ${stock} in stock · ${spare < 0 ? `short by ${-spare} overall` : `${spare} spare overall`}`;
   }
-  if (!hasStock) {
-    note.textContent = "No turkey stock entered yet. Add it on the Turkey Stock page.";
-    return;
-  }
-  const short = buckets.filter((b) => b.spare < 0).map((b) => `${b.label} kg (short by ${-b.spare})`);
-  const tight = buckets.filter((b) => b.ordered > 0 && b.spare >= 0 && stockStatus(b.ordered, b.stock).level === "tight").map((b) => `${b.label} kg (${b.spare} spare)`);
-  const parts = [];
-  if (short.length) parts.push("Short: " + short.join(", "));
-  if (tight.length) parts.push("Tight: " + tight.join(", "));
-  note.textContent = parts.length ? parts.join(". ") + "." : (ordered > 0 ? "Every weight band has enough stock." : "");
 }
 
 // ---------------------------------------------------------------------------
