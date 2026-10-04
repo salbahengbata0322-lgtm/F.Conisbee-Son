@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Conisbee Orders">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -46,32 +46,49 @@
 <!-- ======================= APP SHELL ======================= -->
 <div id="appShell" class="app-shell hidden">
 
-  <header class="topbar">
-    <div class="brand">F. Conisbee &amp; Son</div>
-    <nav class="tabs">
-      <button class="tab-btn" data-tab="checkout">Checkout</button>
-      <button class="tab-btn" data-tab="orderEntry">Order Entry</button>
-      <button class="tab-btn" data-tab="invoice">Invoice</button>
-      <button class="tab-btn" data-tab="customerSearch">Customer Search</button>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle active" id="reportsToggle">Reports ▾</button>
-        <div class="nav-dropdown-menu hidden" id="reportsMenu">
-          <button class="tab-btn nav-dropdown-item active" data-tab="dashboard">Dashboard</button>
-          <button class="tab-btn nav-dropdown-item" data-tab="salesHistory">Sales History</button>
-          <button class="tab-btn nav-dropdown-item" data-tab="marketing">Marketing</button>
-          <button class="tab-btn nav-dropdown-item" data-tab="turkeyPlanning">Turkey Planning</button>
-          <button class="tab-btn nav-dropdown-item" data-tab="turkeyStock">Turkey Stock</button>
-          <button class="tab-btn nav-dropdown-item tab-warning" data-tab="unassigned">⚠ Unassigned</button>
-          <button class="tab-btn nav-dropdown-item" data-tab="backup">💾 Backup</button>
-          <button class="tab-btn nav-dropdown-item" data-tab="security">🔒 Security</button>
-        </div>
+  <aside class="sidebar no-print" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">C</div>
+      <div>
+        <div class="sidebar-title">F. Conisbee &amp; Son</div>
+        <div class="sidebar-subtitle">Park Corner Shop</div>
       </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">Sales</div>
+      <button class="tab-btn nav-item" data-tab="checkout"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3.5h3l2.6 12a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20.5 7.5H6"/></svg><span>Checkout</span></button>
+      <button class="tab-btn nav-item" data-tab="orderEntry"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="4" width="13" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6"/></svg><span>Order Entry</span></button>
+      <button class="tab-btn nav-item" data-tab="invoice"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg><span>Invoice</span></button>
+      <button class="tab-btn nav-item" data-tab="customerSearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg><span>Customer Search</span></button>
+
+      <div class="nav-section">Reports</div>
+      <button class="tab-btn nav-item active" data-tab="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1"/></svg><span>Dashboard</span></button>
+      <button class="tab-btn nav-item" data-tab="salesHistory"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Sales History</span></button>
+      <button class="tab-btn nav-item" data-tab="marketing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l7 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M17.5 9a4 4 0 0 1 0 6"/></svg><span>Marketing</span></button>
+
+      <div class="nav-section">Turkey</div>
+      <button class="tab-btn nav-item" data-tab="turkeyPlanning"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Turkey Planning</span></button>
+      <button class="tab-btn nav-item" data-tab="turkeyStock"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg><span>Turkey Stock</span></button>
+      <button class="tab-btn nav-item" data-tab="unassigned"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.3"/></svg><span>Unassigned</span><span id="unassignedBadge" class="nav-badge hidden">0</span></button>
+
+      <div class="nav-section">Shop admin</div>
+      <button class="tab-btn nav-item" data-tab="backup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 11l4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg><span>Backup</span></button>
+      <button class="tab-btn nav-item" data-tab="security"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span>Security</span></button>
     </nav>
-    <div class="topbar-right">
+
+    <div class="sidebar-footer">
       <span id="userEmail" class="user-email"></span>
       <button id="logoutBtn" class="btn btn-ghost">Log out</button>
     </div>
-  </header>
+  </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <div class="main-col">
+    <header class="mobile-bar no-print">
+      <button id="menuBtn" class="menu-btn" aria-label="Open menu">☰</button>
+      <span class="mobile-title">F. Conisbee &amp; Son</span>
+    </header>
 
   <main class="content">
 
@@ -579,6 +596,12 @@
 
   </main>
 
+  <footer class="app-footer no-print">
+    F. Conisbee &amp; Son &nbsp;·&nbsp; Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ
+    &nbsp;·&nbsp; Tel: 01483 282073 &nbsp;·&nbsp; Email: <a href="mailto:info@fconisbee.com">info@fconisbee.com</a>
+  </footer>
+  </div>
+
   <!-- ============ HELP PANEL ============ -->
   <button id="helpBtn" class="help-fab no-print" title="Help">🤖</button>
   <div id="helpPanel" class="help-panel hidden no-print">
@@ -596,13 +619,9 @@
     </div>
   </div>
 
-  <footer class="app-footer no-print">
-    F. Conisbee &amp; Son &nbsp;·&nbsp; Park Corner, Ockham Road South, East Horsley, Surrey, KT24 6RZ
-    &nbsp;·&nbsp; Tel: 01483 282073 &nbsp;·&nbsp; Email: <a href="mailto:info@fconisbee.com">info@fconisbee.com</a>
-  </footer>
 </div>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {

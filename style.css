@@ -32,48 +32,76 @@ body { margin: 0; font-family: var(--font); color: var(--text); background: #f5f
 .config-warning { background: var(--warning-bg); border: 1px solid var(--amber); border-radius: 6px; padding: 10px; font-size: 12px; margin-bottom: 14px; text-align: left; }
 .error-text { color: #c0392b; font-size: 13px; min-height: 18px; margin-top: 4px; }
 
-/* ---------- App shell ---------- */
-.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
-.topbar {
-  background: var(--primary); color: white; display: flex; align-items: center;
-  padding: 0 20px; height: 56px; flex-shrink: 0; flex-wrap: wrap;
-  position: sticky; top: 0; z-index: 30; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+/* ---------- App shell: left sidebar + main column ---------- */
+:root {
+  --nav-bg: #17395B;
+  --nav-muted: #8DA4BD;
+  --nav-gold: #F2B94B;
 }
-.brand {
-  font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 22px;
-  margin-right: 24px; white-space: nowrap;
-}
-.brand-sub { font-weight: 400; font-size: 12px; opacity: 0.8; margin-left: 8px; }
-.tabs { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
-.tab-btn {
-  background: transparent; border: none; color: white; opacity: 0.75; padding: 8px 14px;
-  border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
-}
-.tab-btn:hover { opacity: 1; background: rgba(255,255,255,0.1); }
-.tab-btn.active { opacity: 1; background: rgba(255,255,255,0.18); }
-.tab-btn.tab-warning { color: #FFE082; }
+.app-shell { min-height: 100vh; display: flex; flex-direction: row; }
 
-/* ---------- Reports dropdown in the top nav ---------- */
-.nav-dropdown { position: relative; }
-.nav-dropdown-toggle {
-  background: transparent; border: none; color: white; opacity: 0.75; padding: 8px 14px;
-  border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+.sidebar {
+  width: 248px; flex-shrink: 0; background: var(--nav-bg); color: white;
+  display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; z-index: 40;
 }
-.nav-dropdown-toggle:hover { opacity: 1; background: rgba(255,255,255,0.1); }
-.nav-dropdown-toggle.active { opacity: 1; background: rgba(255,255,255,0.18); }
-.nav-dropdown-menu {
-  position: absolute; top: 100%; left: 0; margin-top: 4px; background: var(--accent);
-  border-radius: 6px; overflow: hidden; min-width: 180px; box-shadow: 0 6px 18px rgba(0,0,0,0.3); z-index: 20;
+.sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 18px 16px 12px; }
+.sidebar-logo {
+  width: 42px; height: 42px; border-radius: 10px; background: var(--nav-gold); color: var(--nav-bg);
+  font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 24px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.nav-dropdown-menu .nav-dropdown-item {
-  display: block; width: 100%; text-align: left; background: transparent; border: none;
-  color: white; opacity: 0.85; padding: 10px 14px; cursor: pointer; font-size: 13px; font-weight: 600;
+.sidebar-title { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 17px; line-height: 1.15; }
+.sidebar-subtitle { font-size: 13px; color: var(--nav-muted); margin-top: 2px; }
+
+.sidebar-nav { flex: 1; padding: 4px 10px 12px; }
+.nav-section { font-size: 13px; color: var(--nav-muted); padding: 14px 10px 6px; }
+.nav-item {
+  display: flex; align-items: center; gap: 14px; width: 100%; background: transparent; border: none;
+  color: white; opacity: 0.88; padding: 11px 12px; border-radius: 10px; cursor: pointer;
+  font-family: inherit; font-size: 15px; font-weight: 500; text-align: left;
 }
-.nav-dropdown-menu .nav-dropdown-item:hover { opacity: 1; background: rgba(255,255,255,0.1); }
-.nav-dropdown-menu .nav-dropdown-item.active { opacity: 1; background: rgba(255,255,255,0.15); }
-.nav-dropdown-menu .nav-dropdown-item.tab-warning { color: #FFE082; }
-.topbar-right { display: flex; align-items: center; gap: 10px; }
-.user-email { font-size: 12px; opacity: 0.85; }
+.nav-item svg {
+  width: 21px; height: 21px; flex-shrink: 0; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: 0.9;
+}
+.nav-item:hover { background: rgba(255,255,255,0.08); opacity: 1; }
+.nav-item.active { background: rgba(255,255,255,0.15); opacity: 1; font-weight: 700; }
+.nav-badge {
+  margin-left: auto; min-width: 24px; height: 22px; padding: 0 7px; border-radius: 11px;
+  background: var(--nav-gold); color: var(--nav-bg); font-size: 12px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+.sidebar-footer { padding: 12px 16px 16px; border-top: 1px solid rgba(255,255,255,0.12); display: flex; flex-direction: column; gap: 8px; }
+.user-email { font-size: 12px; color: var(--nav-muted); word-break: break-all; }
+.sidebar-footer .btn { width: 100%; background: rgba(255,255,255,0.12); }
+.sidebar-footer .btn:hover { background: rgba(255,255,255,0.2); }
+
+.main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mobile-bar { display: none; }
+.sidebar-backdrop { display: none; }
+
+/* Phones and small tablets: the sidebar slides in from the left behind a ☰ button */
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; width: 270px;
+    transform: translateX(-100%); transition: transform 0.2s ease;
+  }
+  .sidebar.open { transform: translateX(0); box-shadow: 0 0 30px rgba(0,0,0,0.4); }
+  .sidebar-backdrop.show { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 35; }
+  .mobile-bar {
+    display: flex; align-items: center; gap: 12px; background: var(--nav-bg); color: white;
+    height: 52px; padding: 0 14px; position: sticky; top: 0; z-index: 30;
+  }
+  .menu-btn { background: transparent; border: none; color: white; font-size: 26px; cursor: pointer; padding: 4px 8px; line-height: 1; }
+  .mobile-title { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 18px; }
+  /* a little tighter so the whole menu, including Log out, fits on a small phone */
+  .sidebar-brand { padding: 14px 16px 6px; }
+  .nav-section { padding: 10px 10px 4px; }
+  .nav-item { padding: 9px 12px; }
+  .sidebar-footer { padding: 10px 16px 14px; }
+}
 
 .content { flex: 1; padding: 24px 28px; max-width: 1100px; margin: 0 auto; width: 100%; }
 
@@ -202,7 +230,8 @@ h3 { color: var(--accent); font-size: 15px; margin-top: 28px; }
 .line-detail { font-size: 11px; color: #888; font-style: italic; }
 
 @media print {
-  .no-print, .topbar { display: none !important; }
+  .no-print, .sidebar, .mobile-bar, .sidebar-backdrop { display: none !important; }
+  .app-shell { display: block; }
   body { background: white; }
   .invoice-doc { border: none; box-shadow: none; margin: 0; max-width: 100%; }
 }

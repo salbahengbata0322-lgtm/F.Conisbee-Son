@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   wireLoginScreen();
   wireTabs();
+  wireSidebar();
   wireOrderEntry();
   wireCustomerSearch();
   wireInvoice();
@@ -154,19 +155,14 @@ function onLoggedIn(user) {
 // Tabs
 // ---------------------------------------------------------------------------
 function wireTabs() {
-  const groupedTabs = ["dashboard", "salesHistory", "marketing", "turkeyPlanning", "turkeyStock", "unassigned", "backup", "security"];
-  const reportsToggle = document.getElementById("reportsToggle");
-  const reportsMenu = document.getElementById("reportsMenu");
-
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
-
-      reportsToggle.classList.toggle("active", groupedTabs.includes(btn.dataset.tab));
-      reportsMenu.classList.add("hidden");
+      closeSidebar();   // on a phone the menu slides away once you pick a page
+      window.scrollTo(0, 0);
 
       // Refresh shared data on every tab switch — not just after your own actions.
       // Other staff on other devices may have changed orders/payments/sales since
@@ -178,13 +174,32 @@ function wireTabs() {
       if (btn.dataset.tab === "security") renderMfaStatus();
     });
   });
+}
 
-  reportsToggle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    reportsMenu.classList.toggle("hidden");
+// Phone/tablet menu: the sidebar slides in from the left behind a ☰ button
+function openSidebar() {
+  document.getElementById("sidebar").classList.add("open");
+  document.getElementById("sidebarBackdrop").classList.add("show");
+}
+function closeSidebar() {
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("sidebarBackdrop").classList.remove("show");
+}
+function wireSidebar() {
+  document.getElementById("menuBtn").addEventListener("click", () => {
+    if (document.getElementById("sidebar").classList.contains("open")) closeSidebar(); else openSidebar();
   });
-  document.addEventListener("click", () => reportsMenu.classList.add("hidden"));
-  reportsMenu.addEventListener("click", (e) => e.stopPropagation());
+  document.getElementById("sidebarBackdrop").addEventListener("click", closeSidebar);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSidebar(); });
+}
+
+// Yellow count next to "Unassigned" in the menu; hidden when there is nothing to resolve
+function updateUnassignedBadge() {
+  const badge = document.getElementById("unassignedBadge");
+  if (!badge) return;
+  const n = CACHE.unassigned.length;
+  badge.textContent = n;
+  badge.classList.toggle("hidden", n === 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +244,7 @@ async function loadUnassigned() {
   const { data, error } = await sb.from("unassigned").select("*").order("id");
   if (error) { console.error(error); return; }
   CACHE.unassigned = data || [];
+  updateUnassignedBadge();
 }
 
 async function loadOrderBalances() {
